@@ -10,19 +10,21 @@ export type WitnessMap = Map<number, string>;
 /** Witness inputs for range_proof circuit */
 export interface RangeProofWitness {
   value: bigint;
-  min_val: bigint;
-  max_val: bigint;
   blinding: bigint;
   commitment: bigint; // public
+  max_value: bigint;  // public
 }
 
 /** Witness inputs for balance_sufficiency circuit */
 export interface BalanceSufficiencyWitness {
   balance: bigint;
   amount: bigint;
+  new_balance: bigint;
   balance_blinding: bigint;
+  amount_blinding: bigint;
   new_balance_blinding: bigint;
   balance_commitment: bigint; // public
+  amount_commitment: bigint; // public
   new_balance_commitment: bigint; // public
 }
 
@@ -108,19 +110,21 @@ export function generateWitnessInputs(
     case CircuitType.RANGE_PROOF: {
       const d = witness.data;
       inputs['value'] = toHex(d.value);
-      inputs['min_val'] = toHex(d.min_val);
-      inputs['max_val'] = toHex(d.max_val);
       inputs['blinding'] = toHex(d.blinding);
       inputs['commitment'] = toHex(d.commitment);
+      inputs['max_value'] = toHex(d.max_value);
       break;
     }
     case CircuitType.BALANCE_SUFFICIENCY: {
       const d = witness.data;
       inputs['balance'] = toHex(d.balance);
       inputs['amount'] = toHex(d.amount);
+      inputs['new_balance'] = toHex(d.new_balance);
       inputs['balance_blinding'] = toHex(d.balance_blinding);
+      inputs['amount_blinding'] = toHex(d.amount_blinding);
       inputs['new_balance_blinding'] = toHex(d.new_balance_blinding);
       inputs['balance_commitment'] = toHex(d.balance_commitment);
+      inputs['amount_commitment'] = toHex(d.amount_commitment);
       inputs['new_balance_commitment'] = toHex(d.new_balance_commitment);
       break;
     }

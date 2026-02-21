@@ -1,96 +1,148 @@
 /**
  * ShieldedVault contract interaction layer.
- * Wraps starknet.js calls for deposit, withdraw, and unshield operations.
+ * Uses provider.callContract() for reads and account.execute() for writes.
  */
 
-import { Contract, type AccountInterface } from 'starknet';
-import { CONTRACT_ADDRESSES, VAULT_ABI } from './config';
+import { type AccountInterface, CallData, cairo } from 'starknet';
+import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS } from './config';
 
-export function getVaultContract(account: AccountInterface): Contract {
-  return new Contract(VAULT_ABI, CONTRACT_ADDRESSES.shieldedVault, account);
-}
+const vaultAddr = () => CONTRACT_ADDRESSES.shieldedVault;
+const tokenAddr = () => CONTRACT_ADDRESSES.xyBTC;
 
-export interface DepositParams {
+/** Get execute options — on devnet, skip fee estimation with fixed resource bounds */
+const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
+
+export interface ShieldParams {
   amount: bigint;
-  commitment: bigint;
-  ct_c1: bigint;
-  ct_c2: bigint;
+  newBalanceCommitment: bigint;
+  ctDeltaC1: bigint;
+  ctDeltaC2: bigint;
   proofData: string[];
-  publicInputs: string[];
-  nullifier: bigint;
-}
-
-export interface WithdrawParams {
-  amount: bigint;
-  newCommitment: bigint;
-  delta_c1: bigint;
-  delta_c2: bigint;
-  proofData: string[];
-  publicInputs: string[];
   nullifier: bigint;
 }
 
 /**
- * Deposit BTC into the ShieldedVault.
- * Requires a range proof that the deposited amount is valid.
+ * Deposit xyBTC into the ShieldedVault (public balance).
+ * Handles ERC20 approve + vault.deposit in a multicall.
  */
 export async function deposit(
   account: AccountInterface,
-  params: DepositParams
+  amount: bigint,
 ): Promise<string> {
-  const contract = getVaultContract(account);
-  const tx = await contract.invoke('deposit', [
-    params.amount,
-    params.commitment,
-    params.ct_c1,
-    params.ct_c2,
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    [
+      {
+        contractAddress: tokenAddr(),
+        entrypoint: 'approve',
+        calldata: CallData.compile({
+          spender: vaultAddr(),
+          amount: cairo.uint256(amount),
+        }),
+      },
+      {
+        contractAddress: vaultAddr(),
+        entrypoint: 'deposit',
+        calldata: CallData.compile({
+          amount: cairo.uint256(amount),
+        }),
+      },
+    ],
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 /**
- * Withdraw staked tokens from the vault (still shielded as sxyBTC).
- * Requires a balance sufficiency proof.
+ * Withdraw public xyBTC from the vault.
  */
 export async function withdraw(
   account: AccountInterface,
-  params: WithdrawParams
+  amount: bigint,
 ): Promise<string> {
-  const contract = getVaultContract(account);
-  const tx = await contract.invoke('withdraw', [
-    params.amount,
-    params.newCommitment,
-    params.delta_c1,
-    params.delta_c2,
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: vaultAddr(),
+      entrypoint: 'withdraw',
+      calldata: CallData.compile({
+        amount: cairo.uint256(amount),
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 /**
- * Unshield — convert sxyBTC back to public xyBTC.
- * Requires a balance sufficiency proof.
+ * Shield: convert public balance to encrypted sxyBTC balance.
+ * Requires a BALANCE_SUFFICIENCY proof.
+ */
+export async function shield(
+  account: AccountInterface,
+  params: ShieldParams,
+): Promise<string> {
+  const result = await account.execute(
+    {
+      contractAddress: vaultAddr(),
+      entrypoint: 'shield',
+      calldata: CallData.compile({
+        amount: cairo.uint256(params.amount),
+        new_balance_commitment: params.newBalanceCommitment.toString(),
+        new_ct_c1: params.ctDeltaC1.toString(),
+        new_ct_c2: params.ctDeltaC2.toString(),
+        nullifier: params.nullifier.toString(),
+        proof_data: params.proofData,
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
+}
+
+/**
+ * Unshield: convert encrypted sxyBTC back to public balance.
+ * Requires a BALANCE_SUFFICIENCY proof.
  */
 export async function unshield(
   account: AccountInterface,
-  params: WithdrawParams
+  params: ShieldParams,
 ): Promise<string> {
-  const contract = getVaultContract(account);
-  const tx = await contract.invoke('unshield', [
-    params.amount,
-    params.newCommitment,
-    params.delta_c1,
-    params.delta_c2,
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: vaultAddr(),
+      entrypoint: 'unshield',
+      calldata: CallData.compile({
+        amount: cairo.uint256(params.amount),
+        new_balance_commitment: params.newBalanceCommitment.toString(),
+        new_ct_c1: params.ctDeltaC1.toString(),
+        new_ct_c2: params.ctDeltaC2.toString(),
+        nullifier: params.nullifier.toString(),
+        proof_data: params.proofData,
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
+}
+
+/**
+ * Read public balance for user.
+ */
+export async function getPublicBalance(
+  account: AccountInterface,
+  userAddress: string
+): Promise<bigint> {
+  const result = await account.callContract({
+    contractAddress: vaultAddr(),
+    entrypoint: 'get_public_balance',
+    calldata: [userAddress],
+  });
+  const low = BigInt(result[0]);
+  const high = BigInt(result[1]);
+  return low + (high << BigInt(128));
 }
 
 /**
@@ -100,9 +152,12 @@ export async function getBalanceCommitment(
   account: AccountInterface,
   userAddress: string
 ): Promise<bigint> {
-  const contract = getVaultContract(account);
-  const result = await contract.call('get_balance_commitment', [userAddress]);
-  return BigInt(result.toString());
+  const result = await account.callContract({
+    contractAddress: vaultAddr(),
+    entrypoint: 'get_balance_commitment',
+    calldata: [userAddress],
+  });
+  return BigInt(result[0]);
 }
 
 /**
@@ -112,10 +167,12 @@ export async function getBalanceCiphertext(
   account: AccountInterface,
   userAddress: string
 ): Promise<{ c1: bigint; c2: bigint }> {
-  const contract = getVaultContract(account);
-  const result = await contract.call('get_balance_ciphertext', [userAddress]);
-  const arr = result as bigint[];
-  return { c1: BigInt(arr[0].toString()), c2: BigInt(arr[1].toString()) };
+  const result = await account.callContract({
+    contractAddress: vaultAddr(),
+    entrypoint: 'get_encrypted_balance',
+    calldata: [userAddress],
+  });
+  return { c1: BigInt(result[0]), c2: BigInt(result[1]) };
 }
 
 /**
@@ -124,7 +181,12 @@ export async function getBalanceCiphertext(
 export async function getTotalDeposited(
   account: AccountInterface
 ): Promise<bigint> {
-  const contract = getVaultContract(account);
-  const result = await contract.call('get_total_deposited', []);
-  return BigInt(result.toString());
+  const result = await account.callContract({
+    contractAddress: vaultAddr(),
+    entrypoint: 'get_total_deposited',
+    calldata: [],
+  });
+  const low = BigInt(result[0]);
+  const high = BigInt(result[1]);
+  return low + (high << BigInt(128));
 }

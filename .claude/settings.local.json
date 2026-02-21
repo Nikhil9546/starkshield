@@ -6,7 +6,11 @@
       "Bash(snforge test:*)",
       "Bash(snforge:*)",
       "Bash(npm install:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(sncast:*)",
+      "Bash(head:*)",
+      "Bash(source ~/.nvm/nvm.sh && nvm use 20 && npx tsc --noEmit 2>&1)",
+      "Bash(source ~/.nvm/nvm.sh && nvm use 20 && npx vite --host 2>&1)"
     ]
   }
 }

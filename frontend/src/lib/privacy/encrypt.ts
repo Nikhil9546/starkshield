@@ -66,15 +66,13 @@ export function encryptAmount(
 }
 
 /**
- * Compute a Pedersen commitment for an amount.
- * commitment = amount * G + blinding * H
+ * Compute a Pedersen commitment for an amount (legacy simplified version).
+ * @deprecated Use pedersenHashNoir() for circuit-compatible commitments.
  */
 export function pedersenCommit(
   amount: bigint,
   blinding: bigint
 ): bigint {
-  // Simplified: hash(amount, blinding) as commitment
-  // Production: proper Pedersen commitment on Baby JubJub
   const G_FACTOR = BigInt(
     '995203441582195749578291179787384436505546430278305826713579947235728471134'
   );
@@ -83,6 +81,56 @@ export function pedersenCommit(
   );
 
   return (amount * G_FACTOR + blinding * H_FACTOR) % SUBGROUP_ORDER;
+}
+
+/**
+ * Convert a bigint to a 32-byte big-endian Uint8Array (Fr field element).
+ */
+function bigintToFr(value: bigint): Uint8Array {
+  const hex = value.toString(16).padStart(64, '0');
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Convert a 32-byte big-endian Uint8Array (Fr) back to bigint.
+ */
+function frToBigint(fr: Uint8Array): bigint {
+  let result = BigInt(0);
+  for (let i = 0; i < fr.length; i++) {
+    result = (result << BigInt(8)) | BigInt(fr[i]);
+  }
+  return result;
+}
+
+// Cached Barretenberg instance (lazy-initialized)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let bbInstance: any = null;
+
+async function getBarretenberg() {
+  if (bbInstance) return bbInstance;
+  const { Barretenberg } = await import('@aztec/bb.js');
+  bbInstance = await Barretenberg.new();
+  return bbInstance;
+}
+
+/**
+ * Compute Pedersen hash matching Noir's std::hash::pedersen_hash.
+ * Uses Barretenberg WASM for exact compatibility with circuit assertions.
+ *
+ * pedersen_hash([value as Field, blinding])
+ */
+export async function pedersenHashNoir(
+  value: bigint,
+  blinding: bigint
+): Promise<bigint> {
+  const bb = await getBarretenberg();
+  const inputs = [bigintToFr(value), bigintToFr(blinding)];
+  const result = await bb.pedersenHash({ inputs, hashIndex: 0 });
+  return frToBigint(result.hash);
 }
 
 /**

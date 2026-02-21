@@ -1,22 +1,29 @@
 /**
  * ShieldedCDP contract interaction layer.
- * Wraps starknet.js calls for CDP operations: open, lock, mint, repay, close.
+ * Uses provider.callContract() for reads and account.execute() for writes.
  */
 
-import { Contract, type AccountInterface } from 'starknet';
-import { CONTRACT_ADDRESSES, CDP_ABI } from './config';
+import { type AccountInterface, CallData, cairo } from 'starknet';
+import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS } from './config';
 
-export function getCDPContract(account: AccountInterface): Contract {
-  return new Contract(CDP_ABI, CONTRACT_ADDRESSES.shieldedCDP, account);
-}
+const cdpAddr = () => CONTRACT_ADDRESSES.shieldedCDP;
+
+const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
 
 /**
  * Open a new CDP position.
  */
 export async function openCDP(account: AccountInterface): Promise<string> {
-  const contract = getCDPContract(account);
-  const tx = await contract.invoke('open_cdp', []);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: cdpAddr(),
+      entrypoint: 'open_cdp',
+      calldata: [],
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 export interface LockCollateralParams {
@@ -36,17 +43,23 @@ export async function lockCollateral(
   account: AccountInterface,
   params: LockCollateralParams
 ): Promise<string> {
-  const contract = getCDPContract(account);
-  const tx = await contract.invoke('lock_collateral', [
-    params.amount,
-    params.commitment,
-    params.ct_c1,
-    params.ct_c2,
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: cdpAddr(),
+      entrypoint: 'lock_collateral',
+      calldata: CallData.compile({
+        amount: cairo.uint256(params.amount),
+        new_collateral_commitment: params.commitment.toString(),
+        new_col_ct_c1: params.ct_c1.toString(),
+        new_col_ct_c2: params.ct_c2.toString(),
+        nullifier: params.nullifier.toString(),
+        proof_data: params.proofData,
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 export interface MintSUSDParams {
@@ -60,22 +73,27 @@ export interface MintSUSDParams {
 
 /**
  * Mint sUSD stablecoin against locked collateral.
- * Requires a collateral ratio proof (CR >= 200%).
  */
 export async function mintSUSD(
   account: AccountInterface,
   params: MintSUSDParams
 ): Promise<string> {
-  const contract = getCDPContract(account);
-  const tx = await contract.invoke('mint_susd', [
-    params.amount,
-    params.newCollateralCommitment,
-    params.newDebtCommitment,
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: cdpAddr(),
+      entrypoint: 'mint_susd',
+      calldata: CallData.compile({
+        amount: cairo.uint256(params.amount),
+        new_collateral_commitment: params.newCollateralCommitment.toString(),
+        new_debt_commitment: params.newDebtCommitment.toString(),
+        nullifier: params.nullifier.toString(),
+        proof_data: params.proofData,
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 export interface RepayParams {
@@ -93,15 +111,21 @@ export async function repay(
   account: AccountInterface,
   params: RepayParams
 ): Promise<string> {
-  const contract = getCDPContract(account);
-  const tx = await contract.invoke('repay', [
-    params.amount,
-    params.newDebtCommitment,
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: cdpAddr(),
+      entrypoint: 'repay',
+      calldata: CallData.compile({
+        amount: cairo.uint256(params.amount),
+        new_debt_commitment: params.newDebtCommitment.toString(),
+        nullifier: params.nullifier.toString(),
+        proof_data: params.proofData,
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 export interface CloseCDPParams {
@@ -111,31 +135,40 @@ export interface CloseCDPParams {
 }
 
 /**
- * Close a CDP position (requires zero debt proof if debt existed).
+ * Close a CDP position.
  */
 export async function closeCDP(
   account: AccountInterface,
   params: CloseCDPParams
 ): Promise<string> {
-  const contract = getCDPContract(account);
-  const tx = await contract.invoke('close_cdp', [
-    params.proofData,
-    params.publicInputs,
-    params.nullifier,
-  ]);
-  return tx.transaction_hash;
+  const result = await account.execute(
+    {
+      contractAddress: cdpAddr(),
+      entrypoint: 'close_cdp',
+      calldata: CallData.compile({
+        nullifier: params.nullifier.toString(),
+        proof_data: params.proofData,
+      }),
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 /**
  * Check if user has an open CDP.
  */
-export async function getCDPExists(
+export async function hasCDP(
   account: AccountInterface,
   userAddress: string
 ): Promise<boolean> {
-  const contract = getCDPContract(account);
-  const result = await contract.call('get_cdp_exists', [userAddress]);
-  return Boolean(result);
+  const result = await account.callContract({
+    contractAddress: cdpAddr(),
+    entrypoint: 'has_cdp',
+    calldata: [userAddress],
+  });
+  return result[0] !== '0x0';
 }
 
 /**
@@ -145,21 +178,14 @@ export async function getLockedCollateral(
   account: AccountInterface,
   userAddress: string
 ): Promise<bigint> {
-  const contract = getCDPContract(account);
-  const result = await contract.call('get_locked_collateral', [userAddress]);
-  return BigInt(result.toString());
-}
-
-/**
- * Get public debt amount for a user's CDP.
- */
-export async function getPublicDebt(
-  account: AccountInterface,
-  userAddress: string
-): Promise<bigint> {
-  const contract = getCDPContract(account);
-  const result = await contract.call('get_public_debt', [userAddress]);
-  return BigInt(result.toString());
+  const result = await account.callContract({
+    contractAddress: cdpAddr(),
+    entrypoint: 'get_locked_collateral',
+    calldata: [userAddress],
+  });
+  const low = BigInt(result[0]);
+  const high = BigInt(result[1]);
+  return low + (high << BigInt(128));
 }
 
 /**
@@ -169,7 +195,28 @@ export async function getSUSDBalance(
   account: AccountInterface,
   userAddress: string
 ): Promise<bigint> {
-  const contract = getCDPContract(account);
-  const result = await contract.call('get_susd_balance', [userAddress]);
-  return BigInt(result.toString());
+  const result = await account.callContract({
+    contractAddress: cdpAddr(),
+    entrypoint: 'get_susd_balance',
+    calldata: [userAddress],
+  });
+  const low = BigInt(result[0]);
+  const high = BigInt(result[1]);
+  return low + (high << BigInt(128));
+}
+
+/**
+ * Get total debt minted across all CDPs.
+ */
+export async function getTotalDebtMinted(
+  account: AccountInterface
+): Promise<bigint> {
+  const result = await account.callContract({
+    contractAddress: cdpAddr(),
+    entrypoint: 'get_total_debt_minted',
+    calldata: [],
+  });
+  const low = BigInt(result[0]);
+  const high = BigInt(result[1]);
+  return low + (high << BigInt(128));
 }

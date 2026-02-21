@@ -11,7 +11,7 @@ import {
 } from '../lib/privacy/storage';
 
 export default function SettingsPage() {
-  const { address } = useWallet();
+  const { address, setPrivacyKey } = useWallet();
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,8 @@ export default function SettingsPage() {
       setPublicKeyDisplay(
         `(${keyPair.publicKey.x.toString(16).slice(0, 16)}...)`
       );
-      setStatus('Key generated and stored securely.');
+      setPrivacyKey(keyPair.privateKey);
+      setStatus('Key generated and unlocked. Shielded balances will now decrypt automatically.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Key generation failed');
     }
@@ -57,7 +58,8 @@ export default function SettingsPage() {
         setPublicKeyDisplay(
           `(${kp.publicKey.x.toString(16).slice(0, 16)}...)`
         );
-        setStatus('Key loaded successfully.');
+        setPrivacyKey(kp.privateKey);
+        setStatus('Key unlocked. Shielded balances will now decrypt automatically.');
       } else {
         setError('Wrong password or no key found.');
       }
@@ -115,7 +117,8 @@ export default function SettingsPage() {
     deleteKeyPair(address);
     setHasKey(false);
     setPublicKeyDisplay(null);
-    setStatus('Key deleted.');
+    setPrivacyKey(null);
+    setStatus('Key deleted. Shielded balances will show as encrypted.');
   };
 
   if (!address) {

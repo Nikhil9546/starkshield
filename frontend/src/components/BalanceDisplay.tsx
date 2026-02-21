@@ -1,6 +1,6 @@
 interface Props {
   label: string;
-  amount: bigint | null;
+  amount: bigint | string | null;
   decimals?: number;
   symbol?: string;
   shielded?: boolean;
@@ -25,6 +25,24 @@ export default function BalanceDisplay({
   symbol = '',
   shielded = false,
 }: Props) {
+  const displayValue = () => {
+    if (amount === null) return <span className="text-gray-500">--</span>;
+    if (typeof amount === 'string') {
+      return (
+        <>
+          {amount}
+          {symbol && <span className="text-sm text-gray-400 ml-1.5">{symbol}</span>}
+        </>
+      );
+    }
+    return (
+      <>
+        {formatAmount(amount, decimals)}
+        {symbol && <span className="text-sm text-gray-400 ml-1.5">{symbol}</span>}
+      </>
+    );
+  };
+
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-1">
@@ -38,16 +56,7 @@ export default function BalanceDisplay({
         )}
       </div>
       <div className="text-xl font-bold text-gray-100">
-        {amount !== null ? (
-          <>
-            {formatAmount(amount, decimals)}
-            {symbol && (
-              <span className="text-sm text-gray-400 ml-1.5">{symbol}</span>
-            )}
-          </>
-        ) : (
-          <span className="text-gray-500">--</span>
-        )}
+        {displayValue()}
       </div>
     </div>
   );

@@ -5,9 +5,10 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenCommit } from '../lib/privacy/encrypt';
+import { pedersenHashNoir } from '../lib/privacy/encrypt';
 import { generateNullifier } from '../lib/proofs/calldata';
-import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, getCDPExists } from '../lib/contracts/cdp';
+import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP } from '../lib/contracts/cdp';
+import { addProofRecord } from '../lib/proofHistory';
 import type { CollateralRatioWitness, ZeroDebtWitness, RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
 
 type CDPAction = 'lock' | 'mint' | 'repay' | 'close';
@@ -25,7 +26,7 @@ export default function CDPPage() {
   const checkCDP = async () => {
     if (!account || !address) return;
     try {
-      const exists = await getCDPExists(account, address);
+      const exists = await checkHasCDP(account, address);
       setHasCDP(exists);
     } catch {
       setHasCDP(null);
@@ -56,13 +57,12 @@ export default function CDPPage() {
 
       switch (action) {
         case 'lock': {
-          const commitment = pedersenCommit(amountBig, blinding);
+          const commitment = await pedersenHashNoir(amountBig, blinding);
           const witness: RangeProofWitness = {
             value: amountBig,
-            min_val: BigInt(1),
-            max_val: BigInt(2) ** BigInt(64),
             blinding,
             commitment,
+            max_value: BigInt(2) ** BigInt(64) - BigInt(1),
           };
           const proof = await prove({ type: CircuitType.RANGE_PROOF, data: witness });
           const hash = await lockCollateral(account, {
@@ -75,15 +75,18 @@ export default function CDPPage() {
             nullifier,
           });
           setTxHash(hash);
+          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.RANGE_PROOF, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
         case 'mint': {
-          const collateralCommitment = pedersenCommit(balances.lockedCollateral || BigInt(0), blinding);
           const debtBlinding = BigInt(Math.floor(Math.random() * 1e15));
-          const debtCommitment = pedersenCommit(amountBig, debtBlinding);
+          const [collateralCommitment, debtCommitment] = await Promise.all([
+            pedersenHashNoir(balances.lockedCollateral || BigInt(0), blinding),
+            pedersenHashNoir(amountBig, debtBlinding),
+          ]);
           const witness: CollateralRatioWitness = {
             collateral_value: balances.lockedCollateral || BigInt(0),
-            debt_value: (balances.debt || BigInt(0)) + amountBig,
+            debt_value: (balances.susdBalance || BigInt(0)) + amountBig,
             min_ratio: BigInt(200),
             price: BigInt(50000 * 1e8), // placeholder price
             collateral_blinding: blinding,
@@ -101,15 +104,18 @@ export default function CDPPage() {
             nullifier,
           });
           setTxHash(hash);
+          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.COLLATERAL_RATIO, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
         case 'repay': {
-          const newDebt = (balances.debt || BigInt(0)) - amountBig;
+          const newDebt = (balances.susdBalance || BigInt(0)) - amountBig;
           const newBlinding = BigInt(Math.floor(Math.random() * 1e15));
-          const oldCommitment = pedersenCommit(balances.debt || BigInt(0), blinding);
-          const newCommitment = pedersenCommit(newDebt, newBlinding);
+          const [oldCommitment, newCommitment] = await Promise.all([
+            pedersenHashNoir(balances.susdBalance || BigInt(0), blinding),
+            pedersenHashNoir(newDebt, newBlinding),
+          ]);
           const witness: DebtUpdateWitness = {
-            old_debt: balances.debt || BigInt(0),
+            old_debt: balances.susdBalance || BigInt(0),
             new_debt: newDebt,
             delta: amountBig,
             is_increase: false,
@@ -127,10 +133,11 @@ export default function CDPPage() {
             nullifier,
           });
           setTxHash(hash);
+          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.DEBT_UPDATE_VALIDITY, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
         case 'close': {
-          const zeroCommitment = pedersenCommit(BigInt(0), blinding);
+          const zeroCommitment = await pedersenHashNoir(BigInt(0), blinding);
           const witness: ZeroDebtWitness = {
             debt: BigInt(0),
             blinding,
@@ -143,6 +150,7 @@ export default function CDPPage() {
             nullifier,
           });
           setTxHash(hash);
+          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.ZERO_DEBT, status: 'verified', timestamp: Date.now(), txHash: hash });
           setHasCDP(false);
           break;
         }
@@ -178,8 +186,8 @@ export default function CDPPage() {
           symbol="sxyBTC"
         />
         <BalanceDisplay
-          label="Debt"
-          amount={balances.debt}
+          label="sUSD Debt"
+          amount={balances.susdBalance}
           symbol="sUSD"
         />
         <BalanceDisplay

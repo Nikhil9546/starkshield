@@ -5,65 +5,118 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { encryptAmount, pedersenCommit } from '../lib/privacy/encrypt';
+import { pedersenHashNoir, computeCiphertextDelta } from '../lib/privacy/encrypt';
+import { derivePublicKey } from '../lib/privacy/keygen';
 import { generateNullifier } from '../lib/proofs/calldata';
-import { deposit } from '../lib/contracts/vault';
+import { deposit, shield } from '../lib/contracts/vault';
+import { addProofRecord } from '../lib/proofHistory';
 import type { RangeProofWitness } from '../lib/proofs/witness';
 
 export default function StakePage() {
-  const { account, address } = useWallet();
+  const { account, address, isKeyUnlocked, privacyKey } = useWallet();
   const { balances, loading: balancesLoading, refresh } = useBalance();
   const { progress, isProving, error: proofError, prove } = useProof();
+
+  // Deposit state
   const [amount, setAmount] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Shield state
+  const [shieldAmount, setShieldAmount] = useState('');
+  const [shieldTxHash, setShieldTxHash] = useState<string | null>(null);
+  const [shieldTxError, setShieldTxError] = useState<string | null>(null);
+  const [isShielding, setIsShielding] = useState(false);
 
   const handleDeposit = async () => {
     if (!account || !address || !amount) return;
 
     setTxHash(null);
     setTxError(null);
+    setIsSubmitting(true);
 
     try {
       const amountBig = BigInt(Math.floor(parseFloat(amount) * 1e18));
+      const hash = await deposit(account, amountBig);
+      setTxHash(hash);
+      setAmount('');
+      setTimeout(() => refresh(), 1000);
+    } catch (err) {
+      setTxError(err instanceof Error ? err.message : 'Transaction failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleShield = async () => {
+    if (!account || !address || !shieldAmount || !privacyKey) return;
+
+    setShieldTxHash(null);
+    setShieldTxError(null);
+    setIsShielding(true);
+
+    try {
+      const amountBig = BigInt(Math.floor(parseFloat(shieldAmount) * 1e18));
+      const publicKey = derivePublicKey(privacyKey);
+
+      // Shield uses range_proof circuit (not balance_sufficiency).
+      // balance_sufficiency is for withdrawals (proves balance >= amount).
+      // For shielding, the on-chain contract checks public_balance >= amount;
+      // we just prove the amount is valid and properly committed.
+      const MAX_U64 = BigInt(2) ** BigInt(64) - BigInt(1);
+      const amountWitness = BigInt(Math.floor(parseFloat(shieldAmount) * 1e8));
+
       const blinding = BigInt(Math.floor(Math.random() * 1e15));
-      const commitment = pedersenCommit(amountBig, blinding);
+      const commitment = await pedersenHashNoir(amountWitness, blinding);
 
-      // Get user's public key from local storage (simplified — in production, load from encrypted storage)
-      const pubKey = { x: BigInt(1), y: BigInt(1) }; // placeholder
-      const { ciphertext } = encryptAmount(amountBig, pubKey);
-
-      // Generate range proof
       const witness: RangeProofWitness = {
-        value: amountBig,
-        min_val: BigInt(1),
-        max_val: BigInt(2) ** BigInt(64),
+        value: amountWitness,
         blinding,
         commitment,
+        max_value: MAX_U64,
       };
 
-      const proofResult = await prove({
-        type: CircuitType.RANGE_PROOF,
-        data: witness,
-      });
+      const proof = await prove({ type: CircuitType.RANGE_PROOF, data: witness });
 
+      // Compute ciphertext delta (isDeposit=true for shield)
+      const delta = computeCiphertextDelta(amountBig, publicKey, true);
       const nullifier = generateNullifier();
 
-      const hash = await deposit(account, {
+      // Call vault.shield()
+      const hash = await shield(account, {
         amount: amountBig,
-        commitment,
-        ct_c1: ciphertext.c1.x,
-        ct_c2: ciphertext.c2.x,
-        proofData: Array.from(proofResult.proof).map((b) => '0x' + b.toString(16)),
-        publicInputs: proofResult.publicInputs,
+        newBalanceCommitment: commitment,
+        ctDeltaC1: delta.delta_c1,
+        ctDeltaC2: delta.delta_c2,
+        proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
         nullifier,
       });
 
-      setTxHash(hash);
-      setAmount('');
-      await refresh();
+      setShieldTxHash(hash);
+      setShieldAmount('');
+
+      addProofRecord(address, {
+        id: crypto.randomUUID(),
+        circuit: CircuitType.RANGE_PROOF,
+        status: 'verified',
+        timestamp: Date.now(),
+        txHash: hash,
+      });
+
+      setTimeout(() => refresh(), 1000);
     } catch (err) {
-      setTxError(err instanceof Error ? err.message : 'Transaction failed');
+      setShieldTxError(err instanceof Error ? err.message : 'Shield transaction failed');
+      if (address) {
+        addProofRecord(address, {
+          id: crypto.randomUUID(),
+          circuit: CircuitType.RANGE_PROOF,
+          status: 'failed',
+          timestamp: Date.now(),
+        });
+      }
+    } finally {
+      setIsShielding(false);
     }
   };
 
@@ -76,6 +129,14 @@ export default function StakePage() {
     );
   }
 
+  const formatBalance = (val: bigint | null): string => {
+    if (val === null) return '—';
+    const whole = val / BigInt(1e18);
+    const frac = val % BigInt(1e18);
+    const fracStr = frac.toString().padStart(18, '0').slice(0, 4);
+    return `${whole}.${fracStr}`;
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Stake BTC</h2>
@@ -84,27 +145,48 @@ export default function StakePage() {
         into privacy-preserving sxyBTC.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <BalanceDisplay
+          label="Public Balance"
+          amount={formatBalance(balances.publicBalance)}
+          symbol="xyBTC"
+        />
         <BalanceDisplay
           label="Shielded Balance"
-          amount={balances.vaultBalance}
+          amount={balances.vaultBalance !== null ? formatBalance(balances.vaultBalance) : (isKeyUnlocked ? 'Decrypting...' : 'Locked')}
           symbol="sxyBTC"
           shielded
         />
         <BalanceDisplay
           label="Locked Collateral"
-          amount={balances.lockedCollateral}
+          amount={formatBalance(balances.lockedCollateral)}
           symbol="sxyBTC"
         />
         <BalanceDisplay
           label="Total Vault Deposits"
-          amount={balances.totalDeposited}
+          amount={formatBalance(balances.totalDeposited)}
           symbol="BTC"
         />
       </div>
 
+      {!isKeyUnlocked && (
+        <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-sm text-yellow-300">
+          Privacy key locked. Go to <strong>Settings</strong> to generate or unlock your key to see decrypted shielded balances.
+        </div>
+      )}
+
+      {balances.hasCDP && (
+        <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-3 text-sm text-blue-300">
+          You have an active CDP with {formatBalance(balances.susdBalance)} sUSD minted.
+        </div>
+      )}
+
+      {/* Deposit Section */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold mb-4">Deposit</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Deposits xyBTC into the vault as public balance. No ZK proof needed for public deposits.
+        </p>
         <div className="flex gap-3">
           <input
             type="number"
@@ -117,14 +199,12 @@ export default function StakePage() {
           />
           <button
             onClick={handleDeposit}
-            disabled={!amount || isProving || balancesLoading}
+            disabled={!amount || isSubmitting || balancesLoading}
             className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
           >
-            {isProving ? 'Proving...' : 'Deposit & Stake'}
+            {isSubmitting ? 'Depositing...' : 'Deposit & Stake'}
           </button>
         </div>
-
-        <ProofProgress progress={progress} error={proofError} />
 
         {txHash && (
           <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
@@ -137,6 +217,56 @@ export default function StakePage() {
           <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
             {txError}
           </div>
+        )}
+      </div>
+
+      {/* Shield Section */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold mb-4">Shield</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Convert public balance to encrypted sxyBTC. Requires privacy key and generates a ZK proof.
+        </p>
+
+        {!isKeyUnlocked ? (
+          <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-sm text-yellow-300">
+            Privacy key must be unlocked to shield funds. Go to <strong>Settings</strong> to unlock.
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-3">
+              <input
+                type="number"
+                value={shieldAmount}
+                onChange={(e) => setShieldAmount(e.target.value)}
+                placeholder="Amount to shield (xyBTC)"
+                min="0"
+                step="0.001"
+                className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+              />
+              <button
+                onClick={handleShield}
+                disabled={!shieldAmount || isShielding || isProving || balancesLoading}
+                className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+              >
+                {isProving ? 'Proving...' : isShielding ? 'Shielding...' : 'Shield'}
+              </button>
+            </div>
+
+            <ProofProgress progress={progress} error={proofError} />
+
+            {shieldTxHash && (
+              <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
+                <span className="text-green-400">Shield transaction submitted: </span>
+                <span className="text-gray-300 font-mono text-xs break-all">{shieldTxHash}</span>
+              </div>
+            )}
+
+            {shieldTxError && (
+              <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
+                {shieldTxError}
+              </div>
+            )}
+          </>
         )}
       </div>
 
