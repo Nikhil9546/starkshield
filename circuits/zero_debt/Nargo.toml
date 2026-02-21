@@ -1,0 +1,7 @@
+[package]
+name = "zero_debt"
+type = "bin"
+authors = ["StarkShield"]
+compiler_version = ">=0.1.0"
+
+[dependencies]

@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Build outputs
+contracts/target/
+circuits/*/target/
+frontend/dist/
+verifier-contracts/*/target/
+
+# Environment
+.env
+.secrets
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# References (cloned repos)
+references/
+
+AGENTS.md
+CLAUDE.md

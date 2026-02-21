@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nargo:*)",
+      "Bash(scarb build:*)",
+      "Bash(snforge test:*)",
+      "Bash(snforge:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}
