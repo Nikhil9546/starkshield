@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Account, RpcProvider, constants, type AccountInterface } from 'starknet';
-import { getRpcUrl, IS_DEVNET, DEVNET_ACCOUNT } from '../lib/contracts/config';
+import { getRpcUrl, IS_DEVNET, DEVNET_ACCOUNT, DEVNET_RESOURCE_BOUNDS } from '../lib/contracts/config';
 
 interface WalletState {
   account: AccountInterface | null;
@@ -57,18 +57,49 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const provider = new RpcProvider({ nodeUrl: getRpcUrl() });
+      const rpcUrl = getRpcUrl();
+      const provider = new RpcProvider({ nodeUrl: rpcUrl });
       // Devnet doesn't support "pending" block ID — must use "latest"
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (provider as any).channel.blockIdentifier = 'latest';
-      const devnetAccount = new Account(
+      const baseAccount = new Account(
         provider,
         DEVNET_ACCOUNT.address,
         DEVNET_ACCOUNT.privateKey,
         '1',
         constants.TRANSACTION_VERSION.V3,
       );
-      setAccount(devnetAccount);
+
+      // Wrap execute to fetch nonce via raw RPC (avoids "pending" block_id issues in devnet)
+      const origExecute = baseAccount.execute.bind(baseAccount);
+      baseAccount.execute = async function(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        transactions: any, arg2?: any, arg3?: any
+      ) {
+        // Fetch nonce via raw RPC with block_id "latest" (devnet-safe)
+        const nonceResp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', method: 'starknet_getNonce', id: 1,
+            params: { block_id: 'latest', contract_address: DEVNET_ACCOUNT.address },
+          }),
+        });
+        const nonceJson = await nonceResp.json();
+        const nonce = nonceJson.result;
+
+        // Merge nonce into the details/options (3rd argument)
+        const details = arg2 === undefined || Array.isArray(arg2) ? (arg3 || {}) : arg2;
+        details.nonce = nonce;
+
+        if (arg2 === undefined || Array.isArray(arg2)) {
+          return origExecute(transactions, arg2, { ...DEVNET_RESOURCE_BOUNDS, ...details });
+        }
+        return origExecute(transactions, { ...DEVNET_RESOURCE_BOUNDS, ...details });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+
+      setAccount(baseAccount);
       setAddress(DEVNET_ACCOUNT.address);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to connect to devnet';

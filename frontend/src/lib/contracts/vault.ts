@@ -3,7 +3,7 @@
  * Uses provider.callContract() for reads and account.execute() for writes.
  */
 
-import { type AccountInterface, CallData, cairo } from 'starknet';
+import { type AccountInterface } from 'starknet';
 import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS } from './config';
 
 const vaultAddr = () => CONTRACT_ADDRESSES.shieldedVault;
@@ -11,6 +11,20 @@ const tokenAddr = () => CONTRACT_ADDRESSES.xyBTC;
 
 /** Get execute options — on devnet, skip fee estimation with fixed resource bounds */
 const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
+
+/** On devnet, MockProofVerifier always returns true — send minimal proof data to avoid large-calldata RPC issues */
+const devnetProofData = () => IS_DEVNET ? ['0xdeadbeef'] : null;
+
+/** Convert a bigint to 0x-prefixed hex string */
+function toHex(v: bigint): string {
+  return '0x' + v.toString(16);
+}
+
+/** Split a bigint into u256 calldata [low, high] */
+function u256Calldata(v: bigint): [string, string] {
+  const mask = (BigInt(1) << BigInt(128)) - BigInt(1);
+  return [toHex(v & mask), toHex(v >> BigInt(128))];
+}
 
 export interface ShieldParams {
   amount: bigint;
@@ -29,22 +43,18 @@ export async function deposit(
   account: AccountInterface,
   amount: bigint,
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(amount);
   const result = await account.execute(
     [
       {
         contractAddress: tokenAddr(),
         entrypoint: 'approve',
-        calldata: CallData.compile({
-          spender: vaultAddr(),
-          amount: cairo.uint256(amount),
-        }),
+        calldata: [vaultAddr(), amtLow, amtHigh],
       },
       {
         contractAddress: vaultAddr(),
         entrypoint: 'deposit',
-        calldata: CallData.compile({
-          amount: cairo.uint256(amount),
-        }),
+        calldata: [amtLow, amtHigh],
       },
     ],
     undefined,
@@ -60,13 +70,12 @@ export async function withdraw(
   account: AccountInterface,
   amount: bigint,
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(amount);
   const result = await account.execute(
     {
       contractAddress: vaultAddr(),
       entrypoint: 'withdraw',
-      calldata: CallData.compile({
-        amount: cairo.uint256(amount),
-      }),
+      calldata: [amtLow, amtHigh],
     },
     undefined,
     execOpts(),
@@ -76,24 +85,29 @@ export async function withdraw(
 
 /**
  * Shield: convert public balance to encrypted sxyBTC balance.
- * Requires a BALANCE_SUFFICIENCY proof.
+ * Requires a range_proof (first shield) or debt_update_validity proof.
  */
 export async function shield(
   account: AccountInterface,
   params: ShieldParams,
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(params.amount);
+  const proofElems = devnetProofData() ?? params.proofData;
+  const calldata = [
+    amtLow, amtHigh,                         // amount: u256
+    toHex(params.newBalanceCommitment),        // new_balance_commitment: felt252
+    toHex(params.ctDeltaC1),                   // new_ct_c1: felt252
+    toHex(params.ctDeltaC2),                   // new_ct_c2: felt252
+    toHex(params.nullifier),                   // nullifier: felt252
+    toHex(BigInt(proofElems.length)),           // proof_data length (Span prefix)
+    ...proofElems,                             // proof_data elements
+  ];
+
   const result = await account.execute(
     {
       contractAddress: vaultAddr(),
       entrypoint: 'shield',
-      calldata: CallData.compile({
-        amount: cairo.uint256(params.amount),
-        new_balance_commitment: params.newBalanceCommitment.toString(),
-        new_ct_c1: params.ctDeltaC1.toString(),
-        new_ct_c2: params.ctDeltaC2.toString(),
-        nullifier: params.nullifier.toString(),
-        proof_data: params.proofData,
-      }),
+      calldata,
     },
     undefined,
     execOpts(),
@@ -103,24 +117,29 @@ export async function shield(
 
 /**
  * Unshield: convert encrypted sxyBTC back to public balance.
- * Requires a BALANCE_SUFFICIENCY proof.
+ * Requires a balance_sufficiency proof.
  */
 export async function unshield(
   account: AccountInterface,
   params: ShieldParams,
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(params.amount);
+  const proofElems = devnetProofData() ?? params.proofData;
+  const calldata = [
+    amtLow, amtHigh,
+    toHex(params.newBalanceCommitment),
+    toHex(params.ctDeltaC1),
+    toHex(params.ctDeltaC2),
+    toHex(params.nullifier),
+    toHex(BigInt(proofElems.length)),
+    ...proofElems,
+  ];
+
   const result = await account.execute(
     {
       contractAddress: vaultAddr(),
       entrypoint: 'unshield',
-      calldata: CallData.compile({
-        amount: cairo.uint256(params.amount),
-        new_balance_commitment: params.newBalanceCommitment.toString(),
-        new_ct_c1: params.ctDeltaC1.toString(),
-        new_ct_c2: params.ctDeltaC2.toString(),
-        nullifier: params.nullifier.toString(),
-        proof_data: params.proofData,
-      }),
+      calldata,
     },
     undefined,
     execOpts(),

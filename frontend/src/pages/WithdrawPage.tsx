@@ -5,11 +5,12 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenHashNoir, computeCiphertextDelta } from '../lib/privacy/encrypt';
+import { pedersenHashNoir, toStarkFelt, computeCiphertextDelta } from '../lib/privacy/encrypt';
 import { derivePublicKey } from '../lib/privacy/keygen';
-import { generateNullifier } from '../lib/proofs/calldata';
+import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
 import { withdraw, unshield } from '../lib/contracts/vault';
 import { addProofRecord } from '../lib/proofHistory';
+import { getLocalShieldedBalance, subtractShieldedBalance } from '../lib/shieldedBalance';
 import type { BalanceSufficiencyWitness } from '../lib/proofs/witness';
 
 export default function WithdrawPage() {
@@ -59,17 +60,20 @@ export default function WithdrawPage() {
       const amountBig = BigInt(Math.floor(parseFloat(unshieldAmount) * 1e18));
       const publicKey = derivePublicKey(privacyKey);
 
-      // Circuit uses u64 for amounts — use unscaled values for the witness
-      const MAX_U64 = BigInt(2) ** BigInt(64) - BigInt(1);
+      // Circuit uses u64 for amounts — scale to 1e8
       const amountWitness = BigInt(Math.floor(parseFloat(unshieldAmount) * 1e8));
 
-      // Current encrypted balance (0 if decrypted value is invalid/garbage)
-      const rawBalance = balances.vaultBalance ?? BigInt(0);
-      const currentBalance = rawBalance > MAX_U64 ? BigInt(0) : rawBalance;
-      if (amountWitness > currentBalance && currentBalance > BigInt(0)) {
-        throw new Error('Insufficient shielded balance');
+      // Use locally tracked shielded balance (devnet decryption returns garbage)
+      const localShielded = getLocalShieldedBalance(address);
+      // Convert 1e18-scale local balance to 1e8-scale for circuit witness
+      const currentBalance = localShielded / BigInt(1e10);
+      if (currentBalance === BigInt(0)) {
+        throw new Error('No shielded balance tracked. Shield funds first on the Stake page.');
       }
-      const newBalance = currentBalance > BigInt(0) ? currentBalance - amountWitness : BigInt(0);
+      if (amountWitness > currentBalance) {
+        throw new Error(`Insufficient shielded balance: have ${currentBalance}, need ${amountWitness}`);
+      }
+      const newBalance = currentBalance - amountWitness;
 
       // Generate blindings
       const balanceBlinding = BigInt(Math.floor(Math.random() * 1e15));
@@ -105,15 +109,18 @@ export default function WithdrawPage() {
       // Call vault.unshield()
       const hash = await unshield(account, {
         amount: amountBig,
-        newBalanceCommitment,
+        newBalanceCommitment: toStarkFelt(newBalanceCommitment),
         ctDeltaC1: delta.delta_c1,
         ctDeltaC2: delta.delta_c2,
-        proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
+        proofData: bytesToFelts(proof.proof),
         nullifier,
       });
 
       setUnshieldTxHash(hash);
       setUnshieldAmount('');
+
+      // Update local shielded balance tracker
+      subtractShieldedBalance(address, amountBig);
 
       addProofRecord(address, {
         id: crypto.randomUUID(),
@@ -171,7 +178,7 @@ export default function WithdrawPage() {
         />
         <BalanceDisplay
           label="Shielded Balance"
-          amount={balances.vaultBalance !== null ? formatBalance(balances.vaultBalance) : (isKeyUnlocked ? 'Decrypting...' : 'Locked')}
+          amount={formatBalance(getLocalShieldedBalance(address))}
           symbol="sxyBTC"
           shielded
         />
@@ -196,7 +203,7 @@ export default function WithdrawPage() {
         ) : (
           <>
             <div className="text-sm text-gray-400 mb-3">
-              Available shielded balance: {balances.vaultBalance !== null ? formatBalance(balances.vaultBalance) : '...'} sxyBTC
+              Available shielded balance: {formatBalance(getLocalShieldedBalance(address))} sxyBTC
             </div>
 
             <div className="flex gap-3 mb-4">

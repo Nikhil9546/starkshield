@@ -36,7 +36,7 @@ export function encodeCalldata(
  * Convert a byte array to an array of felt252 strings.
  * Each felt252 holds up to 31 bytes (248 bits < 252 bits).
  */
-function bytesToFelts(bytes: Uint8Array): string[] {
+export function bytesToFelts(bytes: Uint8Array): string[] {
   const FELT_BYTES = 31;
   const felts: string[] = [];
 

@@ -8,6 +8,9 @@ const SUBGROUP_ORDER = BigInt(
   '2736030358979909402780800718157159386076813972158567259200215660948447373041'
 );
 
+/** Starknet felt252 prime: P = 2^251 + 17 * 2^192 + 1 */
+const STARK_PRIME = BigInt(2) ** BigInt(251) + BigInt(17) * BigInt(2) ** BigInt(192) + BigInt(1);
+
 export interface Ciphertext {
   c1: { x: bigint; y: bigint };
   c2: { x: bigint; y: bigint };
@@ -130,7 +133,17 @@ export async function pedersenHashNoir(
   const bb = await getBarretenberg();
   const inputs = [bigintToFr(value), bigintToFr(blinding)];
   const result = await bb.pedersenHash({ inputs, hashIndex: 0 });
+  // Returns raw BN254 field element — matches Noir circuit's pedersen_hash.
+  // Use toStarkFelt() when sending to Starknet (felt252 requires < STARK_PRIME).
   return frToBigint(result.hash);
+}
+
+/**
+ * Reduce a BN254 field element to fit in Starknet's felt252 range.
+ * Use this when sending Pedersen hash commitments to on-chain contracts.
+ */
+export function toStarkFelt(value: bigint): bigint {
+  return value % STARK_PRIME;
 }
 
 /**

@@ -5,8 +5,8 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenHashNoir } from '../lib/privacy/encrypt';
-import { generateNullifier } from '../lib/proofs/calldata';
+import { pedersenHashNoir, toStarkFelt } from '../lib/privacy/encrypt';
+import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
 import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP } from '../lib/contracts/cdp';
 import { addProofRecord } from '../lib/proofHistory';
 import type { CollateralRatioWitness, ZeroDebtWitness, RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
@@ -22,6 +22,9 @@ export default function CDPPage() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
   const [hasCDP, setHasCDP] = useState<boolean | null>(null);
+  // Track locked collateral and minted debt locally (on-chain reads return 0 with MockProofVerifier)
+  const [localCollateral, setLocalCollateral] = useState<bigint>(BigInt(0));
+  const [localDebt, setLocalDebt] = useState<bigint>(BigInt(0));
 
   const checkCDP = async () => {
     if (!account || !address) return;
@@ -57,9 +60,11 @@ export default function CDPPage() {
 
       switch (action) {
         case 'lock': {
-          const commitment = await pedersenHashNoir(amountBig, blinding);
+          // Circuit uses u64 — scale to 1e8
+          const amountU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
+          const commitment = await pedersenHashNoir(amountU64, blinding);
           const witness: RangeProofWitness = {
-            value: amountBig,
+            value: amountU64,
             blinding,
             commitment,
             max_value: BigInt(2) ** BigInt(64) - BigInt(1),
@@ -67,72 +72,85 @@ export default function CDPPage() {
           const proof = await prove({ type: CircuitType.RANGE_PROOF, data: witness });
           const hash = await lockCollateral(account, {
             amount: amountBig,
-            commitment,
+            commitment: toStarkFelt(commitment),
             ct_c1: BigInt(0),
             ct_c2: BigInt(0),
-            proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
+            proofData: bytesToFelts(proof.proof),
             publicInputs: proof.publicInputs,
             nullifier,
           });
           setTxHash(hash);
+          setLocalCollateral(prev => prev + amountU64);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.RANGE_PROOF, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
         case 'mint': {
           const debtBlinding = BigInt(Math.floor(Math.random() * 1e15));
+          // Circuit uses u64 amounts — scale to 1e8
+          const collateralU64 = localCollateral > BigInt(0) ? localCollateral : BigInt(Math.floor(parseFloat(amount) * 1e8 * 4));
+          const debtU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
           const [collateralCommitment, debtCommitment] = await Promise.all([
-            pedersenHashNoir(balances.lockedCollateral || BigInt(0), blinding),
-            pedersenHashNoir(amountBig, debtBlinding),
+            pedersenHashNoir(collateralU64, blinding),
+            pedersenHashNoir(debtU64, debtBlinding),
           ]);
           const witness: CollateralRatioWitness = {
-            collateral_value: balances.lockedCollateral || BigInt(0),
-            debt_value: (balances.susdBalance || BigInt(0)) + amountBig,
-            min_ratio: BigInt(200),
-            price: BigInt(50000 * 1e8), // placeholder price
+            collateral: collateralU64,
+            debt: debtU64,
             collateral_blinding: blinding,
             debt_blinding: debtBlinding,
             collateral_commitment: collateralCommitment,
             debt_commitment: debtCommitment,
+            price: BigInt(50000 * 1e8), // placeholder BTC price
+            min_ratio_percent: BigInt(200),
           };
           const proof = await prove({ type: CircuitType.COLLATERAL_RATIO, data: witness });
           const hash = await mintSUSD(account, {
             amount: amountBig,
-            newCollateralCommitment: collateralCommitment,
-            newDebtCommitment: debtCommitment,
-            proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
+            newCollateralCommitment: toStarkFelt(collateralCommitment),
+            newDebtCommitment: toStarkFelt(debtCommitment),
+            proofData: bytesToFelts(proof.proof),
             publicInputs: proof.publicInputs,
             nullifier,
           });
           setTxHash(hash);
+          setLocalDebt(prev => prev + debtU64);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.COLLATERAL_RATIO, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
         case 'repay': {
-          const newDebt = (balances.susdBalance || BigInt(0)) - amountBig;
+          // Circuit uses u64 amounts — scale to 1e8
+          const repayU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
+          const oldDebtU64 = localDebt > BigInt(0) ? localDebt : repayU64;
+          const newDebtU64 = oldDebtU64 > repayU64 ? oldDebtU64 - repayU64 : BigInt(0);
           const newBlinding = BigInt(Math.floor(Math.random() * 1e15));
-          const [oldCommitment, newCommitment] = await Promise.all([
-            pedersenHashNoir(balances.susdBalance || BigInt(0), blinding),
-            pedersenHashNoir(newDebt, newBlinding),
+          const deltaBlinding = BigInt(Math.floor(Math.random() * 1e15));
+          const [oldDebtCommitment, newDebtCommitment, deltaCommitment] = await Promise.all([
+            pedersenHashNoir(oldDebtU64, blinding),
+            pedersenHashNoir(newDebtU64, newBlinding),
+            pedersenHashNoir(repayU64, deltaBlinding),
           ]);
           const witness: DebtUpdateWitness = {
-            old_debt: balances.susdBalance || BigInt(0),
-            new_debt: newDebt,
-            delta: amountBig,
-            is_increase: false,
+            old_debt: oldDebtU64,
+            new_debt: newDebtU64,
+            delta: repayU64,
             old_blinding: blinding,
             new_blinding: newBlinding,
-            old_commitment: oldCommitment,
-            new_commitment: newCommitment,
+            delta_blinding: deltaBlinding,
+            old_debt_commitment: oldDebtCommitment,
+            new_debt_commitment: newDebtCommitment,
+            delta_commitment: deltaCommitment,
+            is_repayment: true,
           };
           const proof = await prove({ type: CircuitType.DEBT_UPDATE_VALIDITY, data: witness });
           const hash = await repay(account, {
             amount: amountBig,
-            newDebtCommitment: newCommitment,
-            proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
+            newDebtCommitment: toStarkFelt(newDebtCommitment),
+            proofData: bytesToFelts(proof.proof),
             publicInputs: proof.publicInputs,
             nullifier,
           });
           setTxHash(hash);
+          setLocalDebt(newDebtU64);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.DEBT_UPDATE_VALIDITY, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
@@ -141,11 +159,11 @@ export default function CDPPage() {
           const witness: ZeroDebtWitness = {
             debt: BigInt(0),
             blinding,
-            commitment: zeroCommitment,
+            debt_commitment: zeroCommitment,
           };
           const proof = await prove({ type: CircuitType.ZERO_DEBT, data: witness });
           const hash = await closeCDP(account, {
-            proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
+            proofData: bytesToFelts(proof.proof),
             publicInputs: proof.publicInputs,
             nullifier,
           });
@@ -161,6 +179,14 @@ export default function CDPPage() {
     } catch (err) {
       setTxError(err instanceof Error ? err.message : 'Transaction failed');
     }
+  };
+
+  // Format u64-scaled (1e8) bigint to display string
+  const formatU64 = (val: bigint): string => {
+    const whole = val / BigInt(1e8);
+    const frac = val % BigInt(1e8);
+    const fracStr = frac.toString().padStart(8, '0').slice(0, 4);
+    return `${whole}.${fracStr}`;
   };
 
   if (!address) {
@@ -182,12 +208,12 @@ export default function CDPPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <BalanceDisplay
           label="Locked Collateral"
-          amount={balances.lockedCollateral}
+          amount={localCollateral > BigInt(0) ? formatU64(localCollateral) : balances.lockedCollateral}
           symbol="sxyBTC"
         />
         <BalanceDisplay
           label="sUSD Debt"
-          amount={balances.susdBalance}
+          amount={localDebt > BigInt(0) ? formatU64(localDebt) : balances.susdBalance}
           symbol="sUSD"
         />
         <BalanceDisplay

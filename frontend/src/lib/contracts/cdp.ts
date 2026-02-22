@@ -3,12 +3,26 @@
  * Uses provider.callContract() for reads and account.execute() for writes.
  */
 
-import { type AccountInterface, CallData, cairo } from 'starknet';
+import { type AccountInterface } from 'starknet';
 import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS } from './config';
 
 const cdpAddr = () => CONTRACT_ADDRESSES.shieldedCDP;
 
 const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
+
+/** On devnet, MockProofVerifier always returns true — send minimal proof data to avoid large-calldata RPC issues */
+const devnetProofData = () => IS_DEVNET ? ['0xdeadbeef'] : null;
+
+/** Convert a bigint to 0x-prefixed hex string */
+function toHex(v: bigint): string {
+  return '0x' + v.toString(16);
+}
+
+/** Split a bigint into u256 calldata [low, high] */
+function u256Calldata(v: bigint): [string, string] {
+  const mask = (BigInt(1) << BigInt(128)) - BigInt(1);
+  return [toHex(v & mask), toHex(v >> BigInt(128))];
+}
 
 /**
  * Open a new CDP position.
@@ -38,24 +52,26 @@ export interface LockCollateralParams {
 
 /**
  * Lock sxyBTC collateral into the CDP.
+ * Cairo signature: lock_collateral(amount: u256, new_collateral_commitment: felt252,
+ *   new_col_ct_c1: felt252, new_col_ct_c2: felt252, nullifier: felt252, proof_data: Span<felt252>)
  */
 export async function lockCollateral(
   account: AccountInterface,
   params: LockCollateralParams
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(params.amount);
+  const proofElems = devnetProofData() ?? params.proofData;
+  const calldata = [
+    amtLow, amtHigh,
+    toHex(params.commitment),
+    toHex(params.ct_c1),
+    toHex(params.ct_c2),
+    toHex(params.nullifier),
+    toHex(BigInt(proofElems.length)),
+    ...proofElems,
+  ];
   const result = await account.execute(
-    {
-      contractAddress: cdpAddr(),
-      entrypoint: 'lock_collateral',
-      calldata: CallData.compile({
-        amount: cairo.uint256(params.amount),
-        new_collateral_commitment: params.commitment.toString(),
-        new_col_ct_c1: params.ct_c1.toString(),
-        new_col_ct_c2: params.ct_c2.toString(),
-        nullifier: params.nullifier.toString(),
-        proof_data: params.proofData,
-      }),
-    },
+    { contractAddress: cdpAddr(), entrypoint: 'lock_collateral', calldata },
     undefined,
     execOpts(),
   );
@@ -73,23 +89,26 @@ export interface MintSUSDParams {
 
 /**
  * Mint sUSD stablecoin against locked collateral.
+ * Cairo signature: mint_susd(amount: u256, new_debt_commitment: felt252,
+ *   new_debt_ct_c1: felt252, new_debt_ct_c2: felt252, nullifier: felt252, proof_data: Span<felt252>)
  */
 export async function mintSUSD(
   account: AccountInterface,
   params: MintSUSDParams
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(params.amount);
+  const proofElems = devnetProofData() ?? params.proofData;
+  const calldata = [
+    amtLow, amtHigh,
+    toHex(params.newDebtCommitment),
+    '0x0', // new_debt_ct_c1
+    '0x0', // new_debt_ct_c2
+    toHex(params.nullifier),
+    toHex(BigInt(proofElems.length)),
+    ...proofElems,
+  ];
   const result = await account.execute(
-    {
-      contractAddress: cdpAddr(),
-      entrypoint: 'mint_susd',
-      calldata: CallData.compile({
-        amount: cairo.uint256(params.amount),
-        new_collateral_commitment: params.newCollateralCommitment.toString(),
-        new_debt_commitment: params.newDebtCommitment.toString(),
-        nullifier: params.nullifier.toString(),
-        proof_data: params.proofData,
-      }),
-    },
+    { contractAddress: cdpAddr(), entrypoint: 'mint_susd', calldata },
     undefined,
     execOpts(),
   );
@@ -106,22 +125,26 @@ export interface RepayParams {
 
 /**
  * Repay sUSD debt.
+ * Cairo signature: repay(amount: u256, new_debt_commitment: felt252,
+ *   new_debt_ct_c1: felt252, new_debt_ct_c2: felt252, nullifier: felt252, proof_data: Span<felt252>)
  */
 export async function repay(
   account: AccountInterface,
   params: RepayParams
 ): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(params.amount);
+  const proofElems = devnetProofData() ?? params.proofData;
+  const calldata = [
+    amtLow, amtHigh,
+    toHex(params.newDebtCommitment),
+    '0x0', // new_debt_ct_c1
+    '0x0', // new_debt_ct_c2
+    toHex(params.nullifier),
+    toHex(BigInt(proofElems.length)),
+    ...proofElems,
+  ];
   const result = await account.execute(
-    {
-      contractAddress: cdpAddr(),
-      entrypoint: 'repay',
-      calldata: CallData.compile({
-        amount: cairo.uint256(params.amount),
-        new_debt_commitment: params.newDebtCommitment.toString(),
-        nullifier: params.nullifier.toString(),
-        proof_data: params.proofData,
-      }),
-    },
+    { contractAddress: cdpAddr(), entrypoint: 'repay', calldata },
     undefined,
     execOpts(),
   );
@@ -136,20 +159,20 @@ export interface CloseCDPParams {
 
 /**
  * Close a CDP position.
+ * Cairo signature: close_cdp(nullifier: felt252, proof_data: Span<felt252>)
  */
 export async function closeCDP(
   account: AccountInterface,
   params: CloseCDPParams
 ): Promise<string> {
+  const proofElems = devnetProofData() ?? params.proofData;
+  const calldata = [
+    toHex(params.nullifier),
+    toHex(BigInt(proofElems.length)),
+    ...proofElems,
+  ];
   const result = await account.execute(
-    {
-      contractAddress: cdpAddr(),
-      entrypoint: 'close_cdp',
-      calldata: CallData.compile({
-        nullifier: params.nullifier.toString(),
-        proof_data: params.proofData,
-      }),
-    },
+    { contractAddress: cdpAddr(), entrypoint: 'close_cdp', calldata },
     undefined,
     execOpts(),
   );

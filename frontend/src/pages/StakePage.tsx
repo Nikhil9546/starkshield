@@ -5,11 +5,12 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenHashNoir, computeCiphertextDelta } from '../lib/privacy/encrypt';
+import { pedersenHashNoir, toStarkFelt, computeCiphertextDelta } from '../lib/privacy/encrypt';
 import { derivePublicKey } from '../lib/privacy/keygen';
-import { generateNullifier } from '../lib/proofs/calldata';
+import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
 import { deposit, shield } from '../lib/contracts/vault';
 import { addProofRecord } from '../lib/proofHistory';
+import { addShieldedBalance, getLocalShieldedBalance } from '../lib/shieldedBalance';
 import type { RangeProofWitness } from '../lib/proofs/witness';
 
 export default function StakePage() {
@@ -86,15 +87,18 @@ export default function StakePage() {
       // Call vault.shield()
       const hash = await shield(account, {
         amount: amountBig,
-        newBalanceCommitment: commitment,
+        newBalanceCommitment: toStarkFelt(commitment),
         ctDeltaC1: delta.delta_c1,
         ctDeltaC2: delta.delta_c2,
-        proofData: Array.from(proof.proof).map((b) => '0x' + b.toString(16)),
+        proofData: bytesToFelts(proof.proof),
         nullifier,
       });
 
       setShieldTxHash(hash);
       setShieldAmount('');
+
+      // Track shielded balance locally (devnet decryption returns garbage)
+      addShieldedBalance(address, amountBig);
 
       addProofRecord(address, {
         id: crypto.randomUUID(),
@@ -153,7 +157,7 @@ export default function StakePage() {
         />
         <BalanceDisplay
           label="Shielded Balance"
-          amount={balances.vaultBalance !== null ? formatBalance(balances.vaultBalance) : (isKeyUnlocked ? 'Decrypting...' : 'Locked')}
+          amount={formatBalance(getLocalShieldedBalance(address))}
           symbol="sxyBTC"
           shielded
         />

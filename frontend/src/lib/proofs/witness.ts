@@ -30,14 +30,14 @@ export interface BalanceSufficiencyWitness {
 
 /** Witness inputs for collateral_ratio circuit */
 export interface CollateralRatioWitness {
-  collateral_value: bigint;
-  debt_value: bigint;
-  min_ratio: bigint;
-  price: bigint;
+  collateral: bigint;
+  debt: bigint;
   collateral_blinding: bigint;
   debt_blinding: bigint;
   collateral_commitment: bigint; // public
   debt_commitment: bigint; // public
+  price: bigint; // public
+  min_ratio_percent: bigint; // public
 }
 
 /** Witness inputs for debt_update_validity circuit */
@@ -45,18 +45,20 @@ export interface DebtUpdateWitness {
   old_debt: bigint;
   new_debt: bigint;
   delta: bigint;
-  is_increase: boolean;
   old_blinding: bigint;
   new_blinding: bigint;
-  old_commitment: bigint; // public
-  new_commitment: bigint; // public
+  delta_blinding: bigint;
+  old_debt_commitment: bigint; // public
+  new_debt_commitment: bigint; // public
+  delta_commitment: bigint; // public
+  is_repayment: boolean; // public
 }
 
 /** Witness inputs for zero_debt circuit */
 export interface ZeroDebtWitness {
   debt: bigint;
   blinding: bigint;
-  commitment: bigint; // public
+  debt_commitment: bigint; // public
 }
 
 /** Witness inputs for vault_solvency circuit */
@@ -130,14 +132,14 @@ export function generateWitnessInputs(
     }
     case CircuitType.COLLATERAL_RATIO: {
       const d = witness.data;
-      inputs['collateral_value'] = toHex(d.collateral_value);
-      inputs['debt_value'] = toHex(d.debt_value);
-      inputs['min_ratio'] = toHex(d.min_ratio);
-      inputs['price'] = toHex(d.price);
+      inputs['collateral'] = toHex(d.collateral);
+      inputs['debt'] = toHex(d.debt);
       inputs['collateral_blinding'] = toHex(d.collateral_blinding);
       inputs['debt_blinding'] = toHex(d.debt_blinding);
       inputs['collateral_commitment'] = toHex(d.collateral_commitment);
       inputs['debt_commitment'] = toHex(d.debt_commitment);
+      inputs['price'] = toHex(d.price);
+      inputs['min_ratio_percent'] = toHex(d.min_ratio_percent);
       break;
     }
     case CircuitType.DEBT_UPDATE_VALIDITY: {
@@ -145,18 +147,20 @@ export function generateWitnessInputs(
       inputs['old_debt'] = toHex(d.old_debt);
       inputs['new_debt'] = toHex(d.new_debt);
       inputs['delta'] = toHex(d.delta);
-      inputs['is_increase'] = toHex(d.is_increase);
       inputs['old_blinding'] = toHex(d.old_blinding);
       inputs['new_blinding'] = toHex(d.new_blinding);
-      inputs['old_commitment'] = toHex(d.old_commitment);
-      inputs['new_commitment'] = toHex(d.new_commitment);
+      inputs['delta_blinding'] = toHex(d.delta_blinding);
+      inputs['old_debt_commitment'] = toHex(d.old_debt_commitment);
+      inputs['new_debt_commitment'] = toHex(d.new_debt_commitment);
+      inputs['delta_commitment'] = toHex(d.delta_commitment);
+      inputs['is_repayment'] = toHex(d.is_repayment);
       break;
     }
     case CircuitType.ZERO_DEBT: {
       const d = witness.data;
       inputs['debt'] = toHex(d.debt);
       inputs['blinding'] = toHex(d.blinding);
-      inputs['commitment'] = toHex(d.commitment);
+      inputs['debt_commitment'] = toHex(d.debt_commitment);
       break;
     }
     case CircuitType.VAULT_SOLVENCY: {
