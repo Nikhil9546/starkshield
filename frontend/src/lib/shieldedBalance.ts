@@ -5,19 +5,36 @@
  * so we track shield/unshield operations locally to maintain an accurate
  * client-side balance for circuit witnesses.
  *
- * Stored as a raw bigint string (1e18 scale) keyed by wallet address.
+ * Stores balance (1e18 scale), and separately stores witness-scale state
+ * (balanceU64, blinding, commitment) so that subsequent shield operations
+ * can construct DEBT_UPDATE_VALIDITY proofs referencing the old commitment.
  */
 
 const STORAGE_KEY = 'obscura_shielded_balance_';
+const WITNESS_KEY = 'obscura_shielded_witness_';
 
-function key(walletAddress: string): string {
+function balKey(walletAddress: string): string {
   return STORAGE_KEY + walletAddress.toLowerCase();
+}
+
+function witKey(walletAddress: string): string {
+  return WITNESS_KEY + walletAddress.toLowerCase();
+}
+
+/** Witness state needed for subsequent shield proofs (DEBT_UPDATE_VALIDITY). */
+export interface ShieldedWitnessState {
+  /** Balance at 1e8 (circuit) scale */
+  balanceU64: bigint;
+  /** Blinding used in the latest commitment */
+  blinding: bigint;
+  /** The Pedersen commitment stored on-chain */
+  commitment: bigint;
 }
 
 /** Get the locally tracked shielded balance (1e18 scale). */
 export function getLocalShieldedBalance(walletAddress: string): bigint {
   try {
-    const raw = localStorage.getItem(key(walletAddress));
+    const raw = localStorage.getItem(balKey(walletAddress));
     if (!raw) return BigInt(0);
     return BigInt(raw);
   } catch {
@@ -25,15 +42,45 @@ export function getLocalShieldedBalance(walletAddress: string): bigint {
   }
 }
 
+/** Get the witness state needed for subsequent shield proofs. */
+export function getShieldedWitnessState(walletAddress: string): ShieldedWitnessState | null {
+  try {
+    const raw = localStorage.getItem(witKey(walletAddress));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      balanceU64: BigInt(parsed.balanceU64),
+      blinding: BigInt(parsed.blinding),
+      commitment: BigInt(parsed.commitment),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Save witness state after a successful shield. */
+export function setShieldedWitnessState(walletAddress: string, state: ShieldedWitnessState): void {
+  localStorage.setItem(witKey(walletAddress), JSON.stringify({
+    balanceU64: state.balanceU64.toString(),
+    blinding: state.blinding.toString(),
+    commitment: state.commitment.toString(),
+  }));
+}
+
+/** Clear witness state (after unshielding to zero). */
+export function clearShieldedWitnessState(walletAddress: string): void {
+  localStorage.removeItem(witKey(walletAddress));
+}
+
 /** Add to the shielded balance (after a successful shield). */
 export function addShieldedBalance(walletAddress: string, amount: bigint): void {
   const current = getLocalShieldedBalance(walletAddress);
-  localStorage.setItem(key(walletAddress), (current + amount).toString());
+  localStorage.setItem(balKey(walletAddress), (current + amount).toString());
 }
 
 /** Subtract from the shielded balance (after a successful unshield). */
 export function subtractShieldedBalance(walletAddress: string, amount: bigint): void {
   const current = getLocalShieldedBalance(walletAddress);
   const next = current > amount ? current - amount : BigInt(0);
-  localStorage.setItem(key(walletAddress), next.toString());
+  localStorage.setItem(balKey(walletAddress), next.toString());
 }

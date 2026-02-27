@@ -12,7 +12,7 @@ import { loadVK } from '../lib/proofs/circuits';
 import { withdraw, unshield } from '../lib/contracts/vault';
 import { IS_DEVNET } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
-import { getLocalShieldedBalance, subtractShieldedBalance } from '../lib/shieldedBalance';
+import { getLocalShieldedBalance, subtractShieldedBalance, setShieldedWitnessState, clearShieldedWitnessState } from '../lib/shieldedBalance';
 import type { BalanceSufficiencyWitness } from '../lib/proofs/witness';
 
 /** On devnet, MockProofVerifier accepts anything — skip real proof generation */
@@ -129,6 +129,17 @@ export default function WithdrawPage() {
 
       // Update local shielded balance tracker
       subtractShieldedBalance(address, amountBig);
+
+      // Update witness state so subsequent shields use the correct old commitment
+      if (newBalance === BigInt(0)) {
+        clearShieldedWitnessState(address);
+      } else {
+        setShieldedWitnessState(address, {
+          balanceU64: newBalance,
+          blinding: newBalResult.blinding,
+          commitment: newBalResult.commitment,
+        });
+      }
 
       addProofRecord(address, {
         id: crypto.randomUUID(),

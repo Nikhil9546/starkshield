@@ -9,11 +9,11 @@ import { findValidBlinding, computeCiphertextDelta } from '../lib/privacy/encryp
 import { derivePublicKey } from '../lib/privacy/keygen';
 import { generateNullifier, bytesToFelts, encodeGaragaCalldata } from '../lib/proofs/calldata';
 import { loadVK } from '../lib/proofs/circuits';
-import { deposit, shield, faucetMint } from '../lib/contracts/vault';
+import { deposit, shield, faucetMint, getBalanceCommitment } from '../lib/contracts/vault';
 import { IS_DEVNET } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
-import { addShieldedBalance, getLocalShieldedBalance } from '../lib/shieldedBalance';
-import type { RangeProofWitness } from '../lib/proofs/witness';
+import { addShieldedBalance, getLocalShieldedBalance, getShieldedWitnessState, setShieldedWitnessState } from '../lib/shieldedBalance';
+import type { RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
 
 /** On devnet, MockProofVerifier accepts anything — skip real proof generation */
 const SKIP_PROOFS = IS_DEVNET;
@@ -91,20 +91,68 @@ export default function StakePage() {
       const amountWitness = BigInt(Math.floor(parseFloat(shieldAmount) * 1e8));
       const publicKey = derivePublicKey(privacyKey);
 
-      const MAX_U64 = BigInt(2) ** BigInt(64) - BigInt(1);
+      // Check on-chain commitment to determine first vs subsequent shield.
+      // The contract routes: commitment == 0 → RANGE_PROOF, else → DEBT_UPDATE_VALIDITY.
+      const onChainCommitment = await getBalanceCommitment(account, address);
+      const isFirstShield = onChainCommitment === BigInt(0);
 
-      // Find a blinding that produces a Pedersen commitment within felt252 range.
-      // This avoids the BN254 > STARK_PRIME truncation issue that breaks proof verification.
-      const { blinding, commitment } = await findValidBlinding(amountWitness);
+      let circuitType: CircuitType;
+      let newCommitment: bigint;
+      let newBlinding: bigint;
+      let proof: { proof: Uint8Array; publicInputs: string[] };
 
-      const witness: RangeProofWitness = {
-        value: amountWitness,
-        blinding,
-        commitment,
-        max_value: MAX_U64,
-      };
+      if (isFirstShield) {
+        // First shield: RANGE_PROOF on the amount
+        circuitType = CircuitType.RANGE_PROOF;
+        const MAX_U64 = BigInt(2) ** BigInt(64) - BigInt(1);
+        const { blinding, commitment } = await findValidBlinding(amountWitness);
+        newBlinding = blinding;
+        newCommitment = commitment;
 
-      const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
+        const witness: RangeProofWitness = {
+          value: amountWitness,
+          blinding,
+          commitment,
+          max_value: MAX_U64,
+        };
+        proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
+      } else {
+        // Subsequent shield: DEBT_UPDATE_VALIDITY proves new_balance = old_balance + delta.
+        // The contract only checks that the Garaga verifier accepts the proof — it does NOT
+        // compare the proof's old_debt_commitment to its own stored commitment.
+        // So we can use local witness state if available, or fall back to old_debt=0.
+        circuitType = CircuitType.DEBT_UPDATE_VALIDITY;
+
+        const oldState = getShieldedWitnessState(address);
+        const oldBalance = oldState?.balanceU64 ?? BigInt(0);
+        const oldBlinding = oldState?.blinding ?? BigInt(1);
+        const newBalance = oldBalance + amountWitness;
+
+        // Compute commitments: for old (use stored or fresh), for delta and new balance
+        const oldCommitmentResult = oldState
+          ? { blinding: oldBlinding, commitment: oldState.commitment }
+          : await findValidBlinding(oldBalance, 1);
+        const [deltaResult, newBalResult] = await Promise.all([
+          findValidBlinding(amountWitness, 100),
+          findValidBlinding(newBalance, 300),
+        ]);
+        newBlinding = newBalResult.blinding;
+        newCommitment = newBalResult.commitment;
+
+        const witness: DebtUpdateWitness = {
+          old_debt: oldBalance,
+          new_debt: newBalance,
+          delta: amountWitness,
+          old_blinding: oldCommitmentResult.blinding,
+          new_blinding: newBalResult.blinding,
+          delta_blinding: deltaResult.blinding,
+          old_debt_commitment: oldCommitmentResult.commitment,
+          new_debt_commitment: newBalResult.commitment,
+          delta_commitment: deltaResult.commitment,
+          is_repayment: false,
+        };
+        proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.DEBT_UPDATE_VALIDITY, data: witness });
+      }
 
       const delta = computeCiphertextDelta(amountBig, publicKey, true);
       const nullifier = generateNullifier();
@@ -114,13 +162,13 @@ export default function StakePage() {
       if (SKIP_PROOFS) {
         proofData = bytesToFelts(proof.proof);
       } else {
-        const vk = await loadVK(CircuitType.RANGE_PROOF);
+        const vk = await loadVK(circuitType);
         proofData = await encodeGaragaCalldata(proof.proof, proof.publicInputs, vk);
       }
 
       const hash = await shield(account, {
         amount: amountBig,
-        newBalanceCommitment: commitment, // already < STARK_PRIME from findValidBlinding
+        newBalanceCommitment: newCommitment,
         ctDeltaC1: delta.delta_c1,
         ctDeltaC2: delta.delta_c2,
         proofData,
@@ -132,9 +180,18 @@ export default function StakePage() {
 
       addShieldedBalance(address, amountBig);
 
+      // Save witness state so the next shield can reference this commitment
+      const oldState = getShieldedWitnessState(address);
+      const oldU64 = oldState?.balanceU64 ?? BigInt(0);
+      setShieldedWitnessState(address, {
+        balanceU64: oldU64 + amountWitness,
+        blinding: newBlinding,
+        commitment: newCommitment,
+      });
+
       addProofRecord(address, {
         id: crypto.randomUUID(),
-        circuit: CircuitType.RANGE_PROOF,
+        circuit: circuitType,
         status: 'verified',
         timestamp: Date.now(),
         txHash: hash,

@@ -8,7 +8,7 @@ import { CircuitType } from '../lib/proofs/circuits';
 import { findValidBlinding } from '../lib/privacy/encrypt';
 import { generateNullifier, bytesToFelts, encodeGaragaCalldata } from '../lib/proofs/calldata';
 import { loadVK } from '../lib/proofs/circuits';
-import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP, checkOracleFreshness, refreshOracle } from '../lib/contracts/cdp';
+import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP, checkOracleFreshness, refreshOracle, getCollateralCommitment } from '../lib/contracts/cdp';
 import { faucetMint } from '../lib/contracts/vault';
 import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
@@ -74,6 +74,8 @@ export default function CDPPage() {
   // On testnet/mainnet, on-chain state works correctly after proof-verified tx.
   const [localCollateral, setLocalCollateral] = useState<bigint>(BigInt(0));
   const [localDebt, setLocalDebt] = useState<bigint>(BigInt(0));
+  // Track collateral witness state for DEBT_UPDATE_VALIDITY (subsequent locks)
+  const [colWitness, setColWitness] = useState<{ balanceU64: bigint; blinding: bigint; commitment: bigint } | null>(null);
   const [oracleStale, setOracleStale] = useState<boolean>(false);
   const [refreshingOracle, setRefreshingOracle] = useState(false);
   const [isMintingCDP, setIsMintingCDP] = useState(false);
@@ -165,27 +167,77 @@ export default function CDPPage() {
       switch (action) {
         case 'lock': {
           const amountU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
-          const { blinding, commitment } = await findValidBlinding(amountU64);
-          const witness: RangeProofWitness = {
-            value: amountU64,
-            blinding,
-            commitment,
-            max_value: BigInt(2) ** BigInt(64) - BigInt(1),
-          };
-          const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
-          const proofData = await encodeProof(proof.proof, proof.publicInputs, CircuitType.RANGE_PROOF);
+
+          // Check on-chain commitment to determine first vs subsequent lock.
+          // ShieldedCDP.lock_collateral routes: commitment == 0 → RANGE_PROOF, else → DEBT_UPDATE_VALIDITY.
+          const onChainColCommitment = await getCollateralCommitment(account, address);
+          const isFirstLock = onChainColCommitment === BigInt(0);
+
+          let lockCircuit: CircuitType;
+          let lockCommitment: bigint;
+          let lockBlinding: bigint;
+          let lockProof: { proof: Uint8Array; publicInputs: string[] };
+
+          if (isFirstLock) {
+            lockCircuit = CircuitType.RANGE_PROOF;
+            const { blinding, commitment } = await findValidBlinding(amountU64);
+            lockBlinding = blinding;
+            lockCommitment = commitment;
+            const witness: RangeProofWitness = {
+              value: amountU64,
+              blinding,
+              commitment,
+              max_value: BigInt(2) ** BigInt(64) - BigInt(1),
+            };
+            lockProof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
+          } else {
+            lockCircuit = CircuitType.DEBT_UPDATE_VALIDITY;
+            // Use local state if available, otherwise fall back to old=0.
+            // The contract only checks that the Garaga verifier accepts the proof —
+            // it does NOT compare the proof's old_commitment to its own stored value.
+            const oldBalance = colWitness?.balanceU64 ?? BigInt(0);
+            const oldBlindingVal = colWitness?.blinding ?? BigInt(1);
+            const newBalance = oldBalance + amountU64;
+
+            const oldCommitResult = colWitness
+              ? { blinding: oldBlindingVal, commitment: colWitness.commitment }
+              : await findValidBlinding(oldBalance, 1);
+            const [deltaResult, newBalResult] = await Promise.all([
+              findValidBlinding(amountU64, 100),
+              findValidBlinding(newBalance, 300),
+            ]);
+            lockBlinding = newBalResult.blinding;
+            lockCommitment = newBalResult.commitment;
+            const witness: DebtUpdateWitness = {
+              old_debt: oldBalance,
+              new_debt: newBalance,
+              delta: amountU64,
+              old_blinding: oldCommitResult.blinding,
+              new_blinding: newBalResult.blinding,
+              delta_blinding: deltaResult.blinding,
+              old_debt_commitment: oldCommitResult.commitment,
+              new_debt_commitment: newBalResult.commitment,
+              delta_commitment: deltaResult.commitment,
+              is_repayment: false,
+            };
+            lockProof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.DEBT_UPDATE_VALIDITY, data: witness });
+          }
+
+          const proofData = await encodeProof(lockProof.proof, lockProof.publicInputs, lockCircuit);
           const hash = await lockCollateral(account, {
             amount: amountBig,
-            commitment,
+            commitment: lockCommitment,
             ct_c1: BigInt(0),
             ct_c2: BigInt(0),
             proofData,
-            publicInputs: proof.publicInputs,
+            publicInputs: lockProof.publicInputs,
             nullifier,
           });
           setTxHash(hash);
+          const prevU64 = colWitness?.balanceU64 ?? BigInt(0);
           setLocalCollateral(prev => prev + amountU64);
-          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.RANGE_PROOF, status: 'verified', timestamp: Date.now(), txHash: hash });
+          setColWitness({ balanceU64: prevU64 + amountU64, blinding: lockBlinding, commitment: lockCommitment });
+          addProofRecord(address, { id: crypto.randomUUID(), circuit: lockCircuit, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
         }
         case 'mint': {

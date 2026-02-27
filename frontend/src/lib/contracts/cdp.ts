@@ -212,6 +212,23 @@ export async function hasCDP(
 }
 
 /**
+ * Get collateral commitment (felt252) for a user's CDP.
+ * Returns 0 if no collateral has been locked yet.
+ */
+export async function getCollateralCommitment(
+  _account: AccountInterface,
+  userAddress: string
+): Promise<bigint> {
+  const provider = getProvider();
+  const result = await provider.callContract({
+    contractAddress: cdpAddr(),
+    entrypoint: 'get_collateral_commitment',
+    calldata: [userAddress],
+  });
+  return BigInt(result[0]);
+}
+
+/**
  * Get locked collateral amount for a user's CDP.
  */
 export async function getLockedCollateral(
