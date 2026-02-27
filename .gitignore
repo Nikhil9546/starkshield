@@ -1,32 +1,50 @@
+# ==============================
 # Dependencies
+# ==============================
 node_modules/
 .venv/
 
+# ==============================
 # Build outputs
+# ==============================
 contracts/target/
 circuits/*/target/
 frontend/dist/
 verifier-contracts/*/target/
 
+# ==============================
 # Environment
+# ==============================
 .env
 .env.*
 .secrets
 
+# ==============================
 # IDE
+# ==============================
 .vscode/
 .idea/
 
+# ==============================
 # OS
+# ==============================
 .DS_Store
 Thumbs.db
 
+# ==============================
 # References (cloned repos)
+# ==============================
 references/
 
+# ==============================
 # AI local assistant context
+# ==============================
 .claude/
 
-# Markdown files (block all except README.md)
+# ==============================
+# Markdown files
+# Block all markdown files
+# Allow ONLY root README.md
+# ==============================
 *.md
-!README.md
+!README.mdREADME.md
