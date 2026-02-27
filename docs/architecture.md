@@ -1,2 +1,0 @@
-# architecture
-TODO: Write documentation
