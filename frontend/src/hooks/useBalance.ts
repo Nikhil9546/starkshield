@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useWallet } from './useWallet';
 import { getPublicBalance, getBalanceCiphertext, getTotalDeposited } from '../lib/contracts/vault';
-import { getLockedCollateral, getSUSDBalance, hasCDP } from '../lib/contracts/cdp';
+import { getLockedCollateral, getDebtCommitment, hasCDP } from '../lib/contracts/cdp';
 import { decryptBalanceFromChain } from '../lib/privacy/decrypt';
 
 export interface ShieldedBalances {
@@ -15,8 +15,8 @@ export interface ShieldedBalances {
   vaultBalance: bigint | null;
   /** Locked collateral in CDP */
   lockedCollateral: bigint | null;
-  /** sUSD balance */
-  susdBalance: bigint | null;
+  /** Debt commitment (felt252) -- non-zero means active debt */
+  debtCommitment: bigint | null;
   /** Total vault deposits (public aggregate) */
   totalDeposited: bigint | null;
   /** Whether user has an open CDP */
@@ -36,7 +36,7 @@ export function useBalance(): UseBalanceReturn {
     publicBalance: null,
     vaultBalance: null,
     lockedCollateral: null,
-    susdBalance: null,
+    debtCommitment: null,
     totalDeposited: null,
     hasCDP: false,
   });
@@ -58,11 +58,11 @@ export function useBalance(): UseBalanceReturn {
 
       try {
         // Fetch all balances in parallel
-        const [pubBal, ciphertext, collateral, susd, totalDep, cdpExists] = await Promise.all([
+        const [pubBal, ciphertext, collateral, debtCommitment, totalDep, cdpExists] = await Promise.all([
           getPublicBalance(account, address).catch((e) => { console.warn('getPublicBalance failed:', e); return BigInt(0); }),
           getBalanceCiphertext(account, address).catch((e) => { console.warn('getBalanceCiphertext failed:', e); return null; }),
           getLockedCollateral(account, address).catch((e) => { console.warn('getLockedCollateral failed:', e); return BigInt(0); }),
-          getSUSDBalance(account, address).catch((e) => { console.warn('getSUSDBalance failed:', e); return BigInt(0); }),
+          getDebtCommitment(account, address).catch((e) => { console.warn('getDebtCommitment failed:', e); return BigInt(0); }),
           getTotalDeposited(account).catch((e) => { console.warn('getTotalDeposited failed:', e); return BigInt(0); }),
           hasCDP(account, address).catch((e) => { console.warn('hasCDP failed:', e); return false; }),
         ]);
@@ -82,7 +82,7 @@ export function useBalance(): UseBalanceReturn {
           publicBalance: pubBal,
           vaultBalance,
           lockedCollateral: collateral,
-          susdBalance: susd,
+          debtCommitment,
           totalDeposited: totalDep,
           hasCDP: cdpExists,
         });

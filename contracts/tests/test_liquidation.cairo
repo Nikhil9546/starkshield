@@ -99,7 +99,7 @@ fn setup_with_debt() -> (ContractAddress, ContractAddress, ContractAddress, IShi
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(2000, 'debt_commit', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.mint_susd('debt_commit', 'dc1', 'dc2', 'null_2', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
     (token, verifier, cdp_addr, cdp)
@@ -310,7 +310,7 @@ fn test_mint_during_liquidation() {
     stop_cheat_caller_address(cdp_addr);
 
     start_cheat_caller_address(cdp_addr, USER1());
-    cdp.mint_susd(100, 'commit', 'c1', 'c2', 'null', array![].span());
+    cdp.mint_susd('commit', 'c1', 'c2', 'null', array![].span());
 }
 
 #[test]
@@ -354,10 +354,10 @@ fn test_repay_during_liquidation() {
 
     // User can still repay during liquidation
     start_cheat_caller_address(cdp_addr, USER1());
-    cdp.repay(500, 'debt_commit_new', 'dc1', 'dc2', 'null_repay', array![].span());
+    cdp.repay('debt_commit_new', 'dc1', 'dc2', 'null_repay', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
-    assert(cdp.get_susd_balance(USER1()) == 1500, 'wrong susd after repay');
+    assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_new', 'wrong debt commit after repay');
 }
 
 // =============================================================================
@@ -382,7 +382,7 @@ fn test_full_liquidation_flow_with_health_proof() {
 
     // 3. CDP still functional after proving health
     start_cheat_caller_address(cdp_addr, USER1());
-    cdp.repay(2000, 'debt_zero', 'dc1z', 'dc2z', 'null_repay', array![].span());
+    cdp.repay('debt_zero', 'dc1z', 'dc2z', 'null_repay', array![].span());
     cdp.close_cdp('null_close', array![].span());
     stop_cheat_caller_address(cdp_addr);
     assert(!cdp.has_cdp(USER1()), 'step3: closed');
@@ -407,7 +407,6 @@ fn test_full_liquidation_flow_seizure() {
 
     // 4. Verify final state
     assert(!cdp.has_cdp(USER1()), 'cdp gone');
-    assert(cdp.get_total_debt_minted() == 0, 'debt written off');
 
     let token_disp = IMockERC20Dispatcher { contract_address: token };
     assert(token_disp.balance_of(LIQUIDATOR()) == 10000, 'liquidator got collateral');

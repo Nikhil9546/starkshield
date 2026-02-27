@@ -78,7 +78,6 @@ pub mod ShieldedVault {
     struct Shielded {
         #[key]
         user: ContractAddress,
-        amount: u256,
         new_commitment: felt252,
         nullifier: felt252,
     }
@@ -87,7 +86,6 @@ pub mod ShieldedVault {
     struct Unshielded {
         #[key]
         user: ContractAddress,
-        amount: u256,
         new_commitment: felt252,
         nullifier: felt252,
     }
@@ -229,7 +227,6 @@ pub mod ShieldedVault {
                 .emit(
                     Shielded {
                         user: caller,
-                        amount,
                         new_commitment: new_balance_commitment,
                         nullifier,
                     },
@@ -282,7 +279,6 @@ pub mod ShieldedVault {
                 .emit(
                     Unshielded {
                         user: caller,
-                        amount,
                         new_commitment: new_balance_commitment,
                         nullifier,
                     },

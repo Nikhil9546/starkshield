@@ -4,7 +4,6 @@ import SolvencyCard from '../components/SolvencyCard';
 import { CircuitType, preloadCircuits } from '../lib/proofs/circuits';
 import { isVaultSolvent, getVaultLastVerified, isCdpSafe, getCdpLastVerified } from '../lib/contracts/solvency';
 import { getTotalDeposited } from '../lib/contracts/vault';
-import { getTotalDebtMinted } from '../lib/contracts/cdp';
 import { loadProofHistory, type ProofRecord } from '../lib/proofHistory';
 
 export default function ProofsPage() {
@@ -24,7 +23,6 @@ export default function ProofsPage() {
 
   // Aggregate protocol stats
   const [totalDeposited, setTotalDeposited] = useState<bigint | null>(null);
-  const [totalDebt, setTotalDebt] = useState<bigint | null>(null);
 
   // Proof history from localStorage
   const [proofHistory, setProofHistory] = useState<ProofRecord[]>([]);
@@ -35,19 +33,17 @@ export default function ProofsPage() {
     setSolvencyLoading(true);
 
     try {
-      const [vSolvent, vTimestamp, cSafe, cTimestamp, deposited, debt] = await Promise.all([
+      const [vSolvent, vTimestamp, cSafe, cTimestamp, deposited] = await Promise.all([
         isVaultSolvent(account).catch(() => null),
         getVaultLastVerified(account).catch(() => null),
         isCdpSafe(account).catch(() => null),
         getCdpLastVerified(account).catch(() => null),
         getTotalDeposited(account).catch(() => null),
-        getTotalDebtMinted(account).catch(() => null),
       ]);
 
       setVaultSolvency({ solvent: vSolvent, lastVerified: vTimestamp });
       setCdpSafety({ solvent: cSafe, lastVerified: cTimestamp });
       setTotalDeposited(deposited);
-      setTotalDebt(debt);
     } catch {
       // Silently fail — data stays as null/unknown
     } finally {
@@ -144,10 +140,11 @@ export default function ProofsPage() {
           </div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">Total CDP Debt</span>
+          <span className="text-xs text-gray-400 uppercase tracking-wide">CDP Debt</span>
           <div className="text-xl font-bold text-gray-100 mt-1">
-            {totalDebt !== null ? formatBalance(totalDebt) : '--'} sUSD
+            Shielded
           </div>
+          <span className="text-xs text-gray-500">Debt amounts are private (commitment-only)</span>
         </div>
       </div>
 

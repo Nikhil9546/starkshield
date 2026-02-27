@@ -242,24 +242,20 @@ fn test_e2e_cdp_full_lifecycle() {
     assert(s.cdp.get_locked_collateral(USER1()) == 15000, 'lock2: wrong collateral');
 
     // Step 4: Mint 2000 sUSD against collateral
-    s.cdp.mint_susd(2000, 'debt_commit_1', 'debt_c1', 'debt_c2', 'cdp_null_3', array![].span());
-    assert(s.cdp.get_susd_balance(USER1()) == 2000, 'mint: wrong susd balance');
-    assert(s.cdp.get_total_debt_minted() == 2000, 'mint: wrong total debt');
+    s.cdp.mint_susd('debt_commit_1', 'debt_c1', 'debt_c2', 'cdp_null_3', array![].span());
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt_commit_1', 'mint: wrong debt commit');
 
     // Step 5: Mint more sUSD
-    s.cdp.mint_susd(1000, 'debt_commit_2', 'debt_c1b', 'debt_c2b', 'cdp_null_4', array![].span());
-    assert(s.cdp.get_susd_balance(USER1()) == 3000, 'mint2: wrong susd');
-    assert(s.cdp.get_total_debt_minted() == 3000, 'mint2: wrong total');
+    s.cdp.mint_susd('debt_commit_2', 'debt_c1b', 'debt_c2b', 'cdp_null_4', array![].span());
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt_commit_2', 'mint2: wrong debt commit');
 
     // Step 6: Repay 1500 sUSD
-    s.cdp.repay(1500, 'debt_commit_3', 'debt_c1c', 'debt_c2c', 'cdp_null_5', array![].span());
-    assert(s.cdp.get_susd_balance(USER1()) == 1500, 'repay: wrong susd');
-    assert(s.cdp.get_total_debt_minted() == 1500, 'repay: wrong total');
+    s.cdp.repay('debt_commit_3', 'debt_c1c', 'debt_c2c', 'cdp_null_5', array![].span());
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt_commit_3', 'repay: wrong debt commit');
 
     // Step 7: Repay remaining 1500 sUSD
-    s.cdp.repay(1500, 'debt_commit_zero', 'debt_c1d', 'debt_c2d', 'cdp_null_6', array![].span());
-    assert(s.cdp.get_susd_balance(USER1()) == 0, 'repay2: susd not zero');
-    assert(s.cdp.get_total_debt_minted() == 0, 'repay2: total not zero');
+    s.cdp.repay('debt_commit_zero', 'debt_c1d', 'debt_c2d', 'cdp_null_6', array![].span());
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt_commit_zero', 'repay2: wrong debt commit');
 
     // Step 8: Close CDP (debt is zero, returns collateral)
     s.cdp.close_cdp('cdp_null_7', array![].span());
@@ -348,22 +344,21 @@ fn test_e2e_multi_user() {
     start_cheat_caller_address(s.cdp_addr, USER1());
     s.cdp.open_cdp();
     s.cdp.lock_collateral(5000, 'u1_col', 'u1cc1', 'u1cc2', 'u1cn1', array![].span());
-    s.cdp.mint_susd(1000, 'u1_debt', 'u1dc1', 'u1dc2', 'u1cn2', array![].span());
+    s.cdp.mint_susd('u1_debt', 'u1dc1', 'u1dc2', 'u1cn2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
     // == USER2: open CDP and mint ==
     start_cheat_caller_address(s.cdp_addr, USER2());
     s.cdp.open_cdp();
     s.cdp.lock_collateral(3000, 'u2_col', 'u2cc1', 'u2cc2', 'u2cn1', array![].span());
-    s.cdp.mint_susd(500, 'u2_debt', 'u2dc1', 'u2dc2', 'u2cn2', array![].span());
+    s.cdp.mint_susd('u2_debt', 'u2dc1', 'u2dc2', 'u2cn2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
     // Verify independent CDP states
     assert(s.cdp.get_locked_collateral(USER1()) == 5000, 'u1: wrong col');
     assert(s.cdp.get_locked_collateral(USER2()) == 3000, 'u2: wrong col');
-    assert(s.cdp.get_susd_balance(USER1()) == 1000, 'u1: wrong susd');
-    assert(s.cdp.get_susd_balance(USER2()) == 500, 'u2: wrong susd');
-    assert(s.cdp.get_total_debt_minted() == 1500, 'total debt wrong');
+    assert(s.cdp.get_debt_commitment(USER1()) == 'u1_debt', 'u1: wrong debt commit');
+    assert(s.cdp.get_debt_commitment(USER2()) == 'u2_debt', 'u2: wrong debt commit');
 }
 
 // =============================================================================
@@ -379,7 +374,7 @@ fn test_e2e_liquidation_prove_health() {
     start_cheat_caller_address(s.cdp_addr, USER1());
     s.cdp.open_cdp();
     s.cdp.lock_collateral(10000, 'col_1', 'cc1', 'cc2', 'ln1', array![].span());
-    s.cdp.mint_susd(2000, 'debt_1', 'dc1', 'dc2', 'ln2', array![].span());
+    s.cdp.mint_susd('debt_1', 'dc1', 'dc2', 'ln2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
     // LIQUIDATOR triggers liquidation challenge
@@ -400,7 +395,7 @@ fn test_e2e_liquidation_prove_health() {
 
     // CDP still operational
     assert(s.cdp.get_locked_collateral(USER1()) == 10000, 'collateral should be intact');
-    assert(s.cdp.get_susd_balance(USER1()) == 2000, 'susd should be intact');
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt_1', 'debt commit should be intact');
 }
 
 #[test]
@@ -410,7 +405,7 @@ fn test_e2e_liquidation_execute_seizure() {
     start_cheat_caller_address(s.cdp_addr, USER1());
     s.cdp.open_cdp();
     s.cdp.lock_collateral(10000, 'col_1', 'cc1', 'cc2', 'ln1', array![].span());
-    s.cdp.mint_susd(2000, 'debt_1', 'dc1', 'dc2', 'ln2', array![].span());
+    s.cdp.mint_susd('debt_1', 'dc1', 'dc2', 'ln2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
     // Trigger liquidation
@@ -460,10 +455,10 @@ fn test_e2e_cross_contract_isolation() {
 
     // CDP operations still work while vault is paused
     start_cheat_caller_address(s.cdp_addr, USER1());
-    s.cdp.mint_susd(1000, 'debt', 'dc1', 'dc2', 'n2', array![].span());
+    s.cdp.mint_susd('debt', 'dc1', 'dc2', 'n2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
-    assert(s.cdp.get_susd_balance(USER1()) == 1000, 'cdp should work independently');
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt', 'cdp should work independently');
 
     // Pause CDP — vault should still work after unpause
     start_cheat_caller_address(s.cdp_addr, OWNER());
@@ -530,7 +525,7 @@ fn test_e2e_repay_during_liquidation() {
     start_cheat_caller_address(s.cdp_addr, USER1());
     s.cdp.open_cdp();
     s.cdp.lock_collateral(10000, 'col', 'c1', 'c2', 'n1', array![].span());
-    s.cdp.mint_susd(2000, 'debt_1', 'dc1', 'dc2', 'n2', array![].span());
+    s.cdp.mint_susd('debt_1', 'dc1', 'dc2', 'n2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
     // Trigger liquidation
@@ -542,11 +537,10 @@ fn test_e2e_repay_during_liquidation() {
 
     // USER1 repays during liquidation window (allowed)
     start_cheat_caller_address(s.cdp_addr, USER1());
-    s.cdp.repay(1000, 'debt_2', 'dc1b', 'dc2b', 'n3', array![].span());
+    s.cdp.repay('debt_2', 'dc1b', 'dc2b', 'n3', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
 
-    assert(s.cdp.get_susd_balance(USER1()) == 1000, 'repay during liq: wrong susd');
-    assert(s.cdp.get_total_debt_minted() == 1000, 'repay during liq: wrong total');
+    assert(s.cdp.get_debt_commitment(USER1()) == 'debt_2', 'repay during liq: wrong commit');
 }
 
 // =============================================================================
@@ -639,16 +633,15 @@ fn test_e2e_complete_happy_path() {
 
     // === Step 5: Mint sUSD ===
     start_cheat_caller_address(s.cdp_addr, USER1());
-    s.cdp.mint_susd(5000, 'cdp_debt_5k', 'dc1', 'dc2', 'cn2', array![].span());
+    s.cdp.mint_susd('cdp_debt_5k', 'dc1', 'dc2', 'cn2', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
-    assert(s.cdp.get_susd_balance(USER1()) == 5000, 'e2e step5: mint susd');
+    assert(s.cdp.get_debt_commitment(USER1()) == 'cdp_debt_5k', 'e2e step5: mint debt commit');
 
     // === Step 6: Repay all sUSD ===
     start_cheat_caller_address(s.cdp_addr, USER1());
-    s.cdp.repay(5000, 'cdp_debt_zero', 'dc1b', 'dc2b', 'cn3', array![].span());
+    s.cdp.repay('cdp_debt_zero', 'dc1b', 'dc2b', 'cn3', array![].span());
     stop_cheat_caller_address(s.cdp_addr);
-    assert(s.cdp.get_susd_balance(USER1()) == 0, 'e2e step6: repay susd');
-    assert(s.cdp.get_total_debt_minted() == 0, 'e2e step6: total debt');
+    assert(s.cdp.get_debt_commitment(USER1()) == 'cdp_debt_zero', 'e2e step6: repay commit');
 
     // === Step 7: Close CDP (returns collateral) ===
     start_cheat_caller_address(s.cdp_addr, USER1());

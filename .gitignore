@@ -10,6 +10,7 @@ verifier-contracts/*/target/
 
 # Environment
 .env
+.env.*
 .secrets
 
 # IDE
@@ -27,3 +28,8 @@ references/
 CLAUDE.md
 AGENTS.md
 .claude/
+
+# Extra documentation / context files
+FRONTEND_DEVELOPER_CONTEXT.md
+TESTNET_GUIDE.md
+*.local.md

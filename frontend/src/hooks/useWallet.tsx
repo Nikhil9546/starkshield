@@ -13,7 +13,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import { Account, RpcProvider, constants, type AccountInterface } from 'starknet';
+import { Account, WalletAccount, RpcProvider, constants, type AccountInterface } from 'starknet';
 import { getRpcUrl, IS_DEVNET, DEVNET_ACCOUNT, DEVNET_RESOURCE_BOUNDS } from '../lib/contracts/config';
 
 interface WalletState {
@@ -125,14 +125,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const wallet = availableWallets[0];
       const connectedWallet = await starknet.enable(wallet);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const walletAny = connectedWallet as any;
-      if (walletAny.account && walletAny.selectedAddress) {
-        setAccount(walletAny.account as AccountInterface);
-        setAddress(walletAny.selectedAddress as string);
-      } else {
-        throw new Error('Wallet connected but no account available.');
+      // get-starknet-core v4: use RPC request to get accounts
+      const accounts: string[] = await connectedWallet.request({
+        type: 'wallet_requestAccounts',
+      });
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned from wallet. Please unlock your wallet and try again.');
       }
+
+      const selectedAddr = accounts[0];
+      const rpcUrl = getRpcUrl();
+      const provider = new RpcProvider({ nodeUrl: rpcUrl });
+      // Cartridge Sepolia RPC doesn't support "pending" block — use "latest"
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (provider as any).channel.blockIdentifier = 'latest';
+
+      // Create an Account instance using the wallet as the signer
+      // The wallet handles signing via its request() method
+      const walletAccount = new WalletAccount(provider, connectedWallet);
+
+      setAccount(walletAccount);
+      setAddress(selectedAddr);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to connect wallet';
       setError(message);

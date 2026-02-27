@@ -88,7 +88,6 @@ pub trait IShieldedCDP<TContractState> {
     /// Requires collateral_ratio proof and non-stale oracle price.
     fn mint_susd(
         ref self: TContractState,
-        amount: u256,
         new_debt_commitment: felt252,
         new_debt_ct_c1: felt252,
         new_debt_ct_c2: felt252,
@@ -100,7 +99,6 @@ pub trait IShieldedCDP<TContractState> {
     /// Requires debt_update_validity proof (repayment).
     fn repay(
         ref self: TContractState,
-        amount: u256,
         new_debt_commitment: felt252,
         new_debt_ct_c1: felt252,
         new_debt_ct_c2: felt252,
@@ -144,9 +142,7 @@ pub trait IShieldedCDP<TContractState> {
     ) -> (felt252, felt252);
     fn get_debt_commitment(self: @TContractState, account: ContractAddress) -> felt252;
     fn get_encrypted_debt(self: @TContractState, account: ContractAddress) -> (felt252, felt252);
-    fn get_susd_balance(self: @TContractState, account: ContractAddress) -> u256;
     fn get_locked_collateral(self: @TContractState, account: ContractAddress) -> u256;
-    fn get_total_debt_minted(self: @TContractState) -> u256;
     fn is_in_liquidation(self: @TContractState, account: ContractAddress) -> bool;
     fn get_liquidation_deadline(self: @TContractState, account: ContractAddress) -> u64;
     fn is_cdp_paused(self: @TContractState) -> bool;

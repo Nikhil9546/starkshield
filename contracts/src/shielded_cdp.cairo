@@ -54,17 +54,12 @@ pub mod ShieldedCDP {
         // ElGamal ciphertext for collateral (client-side decryption)
         collateral_ct_c1: Map<ContractAddress, felt252>,
         collateral_ct_c2: Map<ContractAddress, felt252>,
-        // Public debt tracking (sUSD minted)
-        public_debt: Map<ContractAddress, u256>,
         // Pedersen commitment to the user's debt
         debt_commitments: Map<ContractAddress, felt252>,
         // ElGamal ciphertext for debt (client-side decryption)
         debt_ct_c1: Map<ContractAddress, felt252>,
         debt_ct_c2: Map<ContractAddress, felt252>,
-        // sUSD balances (minted stablecoin)
-        susd_balances: Map<ContractAddress, u256>,
         // Aggregate tracking
-        total_debt_minted: u256,
         total_collateral_locked: u256,
         // Liquidation state
         liquidation_triggered: Map<ContractAddress, bool>,
@@ -103,7 +98,6 @@ pub mod ShieldedCDP {
     struct CollateralLocked {
         #[key]
         user: ContractAddress,
-        amount: u256,
         new_commitment: felt252,
         nullifier: felt252,
     }
@@ -112,7 +106,6 @@ pub mod ShieldedCDP {
     struct CollateralUnlocked {
         #[key]
         user: ContractAddress,
-        amount: u256,
         new_commitment: felt252,
         nullifier: felt252,
     }
@@ -121,7 +114,6 @@ pub mod ShieldedCDP {
     struct SUSDMinted {
         #[key]
         user: ContractAddress,
-        amount: u256,
         new_debt_commitment: felt252,
         nullifier: felt252,
     }
@@ -130,7 +122,6 @@ pub mod ShieldedCDP {
     struct DebtRepaid {
         #[key]
         user: ContractAddress,
-        amount: u256,
         new_debt_commitment: felt252,
         nullifier: felt252,
     }
@@ -139,7 +130,7 @@ pub mod ShieldedCDP {
     struct CDPClosed {
         #[key]
         user: ContractAddress,
-        collateral_returned: u256,
+        nullifier: felt252,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -159,7 +150,6 @@ pub mod ShieldedCDP {
     struct LiquidationExecuted {
         #[key]
         user: ContractAddress,
-        collateral_seized: u256,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -275,7 +265,6 @@ pub mod ShieldedCDP {
                 .emit(
                     CollateralLocked {
                         user: caller,
-                        amount,
                         new_commitment: new_collateral_commitment,
                         nullifier,
                     },
@@ -356,7 +345,6 @@ pub mod ShieldedCDP {
                 .emit(
                     CollateralUnlocked {
                         user: caller,
-                        amount,
                         new_commitment: new_collateral_commitment,
                         nullifier,
                     },
@@ -368,7 +356,6 @@ pub mod ShieldedCDP {
         /// Oracle price must not be stale.
         fn mint_susd(
             ref self: ContractState,
-            amount: u256,
             new_debt_commitment: felt252,
             new_debt_ct_c1: felt252,
             new_debt_ct_c2: felt252,
@@ -377,7 +364,6 @@ pub mod ShieldedCDP {
         ) {
             self.assert_not_paused();
             self.assert_not_in_liquidation();
-            assert(amount > 0, 'amount must be positive');
             assert(new_debt_commitment != 0, 'invalid commitment');
             assert(nullifier != 0, 'invalid nullifier');
             assert(!self.used_nullifiers.entry(nullifier).read(), 'nullifier already used');
@@ -404,23 +390,15 @@ pub mod ShieldedCDP {
             assert(verified, 'collateral ratio proof failed');
 
             // State mutation (after proof verification)
-            let current_debt = self.public_debt.entry(caller).read();
-            self.public_debt.entry(caller).write(current_debt + amount);
             self.debt_commitments.entry(caller).write(new_debt_commitment);
             self.debt_ct_c1.entry(caller).write(new_debt_ct_c1);
             self.debt_ct_c2.entry(caller).write(new_debt_ct_c2);
             self.used_nullifiers.entry(nullifier).write(true);
 
-            // Credit sUSD to user
-            let current_susd = self.susd_balances.entry(caller).read();
-            self.susd_balances.entry(caller).write(current_susd + amount);
-            self.total_debt_minted.write(self.total_debt_minted.read() + amount);
-
             self
                 .emit(
                     SUSDMinted {
                         user: caller,
-                        amount,
                         new_debt_commitment,
                         nullifier,
                     },
@@ -431,7 +409,6 @@ pub mod ShieldedCDP {
         /// Requires debt_update_validity proof (repayment path).
         fn repay(
             ref self: ContractState,
-            amount: u256,
             new_debt_commitment: felt252,
             new_debt_ct_c1: felt252,
             new_debt_ct_c2: felt252,
@@ -439,7 +416,6 @@ pub mod ShieldedCDP {
             proof_data: Span<felt252>,
         ) {
             self.assert_not_paused();
-            assert(amount > 0, 'amount must be positive');
             assert(nullifier != 0, 'invalid nullifier');
             assert(!self.used_nullifiers.entry(nullifier).read(), 'nullifier already used');
 
@@ -449,10 +425,7 @@ pub mod ShieldedCDP {
             let old_debt_commitment = self.debt_commitments.entry(caller).read();
             assert(old_debt_commitment != ZERO_COMMITMENT, 'no debt to repay');
 
-            let current_susd = self.susd_balances.entry(caller).read();
-            assert(current_susd >= amount, 'insufficient susd balance');
-
-            // Verify debt_update_validity proof (repayment: new_debt = old_debt - amount)
+            // Verify debt_update_validity proof (repayment: new_debt = old_debt - delta)
             let verifier = IProofVerifierDispatcher {
                 contract_address: self.proof_verifier.read(),
             };
@@ -465,22 +438,15 @@ pub mod ShieldedCDP {
             assert(verified, 'debt update proof failed');
 
             // State mutation (after proof verification)
-            let current_debt = self.public_debt.entry(caller).read();
-            self.public_debt.entry(caller).write(current_debt - amount);
             self.debt_commitments.entry(caller).write(new_debt_commitment);
             self.debt_ct_c1.entry(caller).write(new_debt_ct_c1);
             self.debt_ct_c2.entry(caller).write(new_debt_ct_c2);
             self.used_nullifiers.entry(nullifier).write(true);
 
-            // Burn sUSD from user
-            self.susd_balances.entry(caller).write(current_susd - amount);
-            self.total_debt_minted.write(self.total_debt_minted.read() - amount);
-
             self
                 .emit(
                     DebtRepaid {
                         user: caller,
-                        amount,
                         new_debt_commitment,
                         nullifier,
                     },
@@ -537,7 +503,6 @@ pub mod ShieldedCDP {
             self.debt_commitments.entry(caller).write(ZERO_COMMITMENT);
             self.debt_ct_c1.entry(caller).write(0);
             self.debt_ct_c2.entry(caller).write(0);
-            self.public_debt.entry(caller).write(0);
             self.used_nullifiers.entry(nullifier).write(true);
 
             if collateral_amount > 0 {
@@ -546,7 +511,7 @@ pub mod ShieldedCDP {
                     .write(self.total_collateral_locked.read() - collateral_amount);
             }
 
-            self.emit(CDPClosed { user: caller, collateral_returned: collateral_amount });
+            self.emit(CDPClosed { user: caller, nullifier });
         }
 
         /// Trigger liquidation challenge on a user's CDP.
@@ -631,11 +596,6 @@ pub mod ShieldedCDP {
             }
 
             // Clear CDP state (debt is effectively written off)
-            let debt_amount = self.public_debt.entry(user).read();
-            if debt_amount > 0 {
-                self.total_debt_minted.write(self.total_debt_minted.read() - debt_amount);
-            }
-
             self.cdp_exists.entry(user).write(false);
             self.locked_collateral.entry(user).write(0);
             self.collateral_commitments.entry(user).write(ZERO_COMMITMENT);
@@ -644,12 +604,10 @@ pub mod ShieldedCDP {
             self.debt_commitments.entry(user).write(ZERO_COMMITMENT);
             self.debt_ct_c1.entry(user).write(0);
             self.debt_ct_c2.entry(user).write(0);
-            self.public_debt.entry(user).write(0);
-            self.susd_balances.entry(user).write(0);
             self.liquidation_triggered.entry(user).write(false);
             self.liquidation_deadline.entry(user).write(0);
 
-            self.emit(LiquidationExecuted { user, collateral_seized: collateral_amount });
+            self.emit(LiquidationExecuted { user });
         }
 
         /// Pause the CDP system. Only callable by owner.
@@ -700,16 +658,8 @@ pub mod ShieldedCDP {
             )
         }
 
-        fn get_susd_balance(self: @ContractState, account: ContractAddress) -> u256 {
-            self.susd_balances.entry(account).read()
-        }
-
         fn get_locked_collateral(self: @ContractState, account: ContractAddress) -> u256 {
             self.locked_collateral.entry(account).read()
-        }
-
-        fn get_total_debt_minted(self: @ContractState) -> u256 {
-            self.total_debt_minted.read()
         }
 
         fn is_in_liquidation(self: @ContractState, account: ContractAddress) -> bool {

@@ -8,10 +8,15 @@ import { CircuitType } from '../lib/proofs/circuits';
 import { pedersenHashNoir, toStarkFelt, computeCiphertextDelta } from '../lib/privacy/encrypt';
 import { derivePublicKey } from '../lib/privacy/keygen';
 import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
-import { deposit, shield } from '../lib/contracts/vault';
+import { deposit, shield, faucetMint } from '../lib/contracts/vault';
+import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
 import { addShieldedBalance, getLocalShieldedBalance } from '../lib/shieldedBalance';
 import type { RangeProofWitness } from '../lib/proofs/witness';
+
+/** On devnet/sepolia, MockProofVerifier accepts anything — skip real proof generation */
+const SKIP_PROOFS = IS_DEVNET || NETWORK === 'sepolia';
+const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
 
 export default function StakePage() {
   const { account, address, isKeyUnlocked, privacyKey } = useWallet();
@@ -24,11 +29,31 @@ export default function StakePage() {
   const [txError, setTxError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Faucet state
+  const [isMinting, setIsMinting] = useState(false);
+  const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
+
   // Shield state
   const [shieldAmount, setShieldAmount] = useState('');
   const [shieldTxHash, setShieldTxHash] = useState<string | null>(null);
   const [shieldTxError, setShieldTxError] = useState<string | null>(null);
   const [isShielding, setIsShielding] = useState(false);
+
+  const handleFaucet = async () => {
+    if (!account || !address) return;
+    setIsMinting(true);
+    setFaucetMsg(null);
+    try {
+      const mintAmount = BigInt(100) * BigInt(10) ** BigInt(18); // 100 xyBTC
+      const hash = await faucetMint(account, address, mintAmount);
+      setFaucetMsg(`Minted 100 xyBTC! tx: ${hash}`);
+      setTimeout(() => refresh(), 5000);
+    } catch (err) {
+      setFaucetMsg(err instanceof Error ? err.message : 'Faucet failed');
+    } finally {
+      setIsMinting(false);
+    }
+  };
 
   const handleDeposit = async () => {
     if (!account || !address || !amount) return;
@@ -42,7 +67,7 @@ export default function StakePage() {
       const hash = await deposit(account, amountBig);
       setTxHash(hash);
       setAmount('');
-      setTimeout(() => refresh(), 1000);
+      setTimeout(() => refresh(), 5000);
     } catch (err) {
       setTxError(err instanceof Error ? err.message : 'Transaction failed');
     } finally {
@@ -78,7 +103,7 @@ export default function StakePage() {
         max_value: MAX_U64,
       };
 
-      const proof = await prove({ type: CircuitType.RANGE_PROOF, data: witness });
+      const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
 
       // Compute ciphertext delta (isDeposit=true for shield)
       const delta = computeCiphertextDelta(amountBig, publicKey, true);
@@ -108,7 +133,7 @@ export default function StakePage() {
         txHash: hash,
       });
 
-      setTimeout(() => refresh(), 1000);
+      setTimeout(() => refresh(), 5000);
     } catch (err) {
       setShieldTxError(err instanceof Error ? err.message : 'Shield transaction failed');
       if (address) {
@@ -181,9 +206,29 @@ export default function StakePage() {
 
       {balances.hasCDP && (
         <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-3 text-sm text-blue-300">
-          You have an active CDP with {formatBalance(balances.susdBalance)} sUSD minted.
+          You have an active CDP{balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? ' with outstanding debt' : ''}.
         </div>
       )}
+
+      {/* Faucet */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Testnet Faucet</h3>
+            <p className="text-xs text-gray-500">Mint 100 test xyBTC tokens to your wallet</p>
+          </div>
+          <button
+            onClick={handleFaucet}
+            disabled={isMinting}
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-gray-200 text-sm font-medium px-4 py-1.5 rounded transition-colors"
+          >
+            {isMinting ? 'Minting...' : 'Get Test Tokens'}
+          </button>
+        </div>
+        {faucetMsg && (
+          <p className="mt-2 text-xs text-gray-400 break-all">{faucetMsg}</p>
+        )}
+      </div>
 
       {/* Deposit Section */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">

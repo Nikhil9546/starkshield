@@ -9,9 +9,14 @@ import { pedersenHashNoir, toStarkFelt, computeCiphertextDelta } from '../lib/pr
 import { derivePublicKey } from '../lib/privacy/keygen';
 import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
 import { withdraw, unshield } from '../lib/contracts/vault';
+import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
 import { getLocalShieldedBalance, subtractShieldedBalance } from '../lib/shieldedBalance';
 import type { BalanceSufficiencyWitness } from '../lib/proofs/witness';
+
+/** On devnet/sepolia, MockProofVerifier accepts anything — skip real proof generation */
+const SKIP_PROOFS = IS_DEVNET || NETWORK === 'sepolia';
+const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
 
 export default function WithdrawPage() {
   const { account, address, isKeyUnlocked, privacyKey } = useWallet();
@@ -100,7 +105,7 @@ export default function WithdrawPage() {
         new_balance_commitment: newBalanceCommitment,
       };
 
-      const proof = await prove({ type: CircuitType.BALANCE_SUFFICIENCY, data: witness });
+      const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.BALANCE_SUFFICIENCY, data: witness });
 
       // Compute ciphertext delta (isDeposit=false for unshield/subtraction)
       const delta = computeCiphertextDelta(amountBig, publicKey, false);

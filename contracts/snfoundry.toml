@@ -3,3 +3,8 @@
 account = "devnet-deployer"
 accounts-file = "/Users/nikhilkumar/.starknet_accounts/starknet_open_zeppelin_accounts.json"
 url = "http://localhost:5050/"
+
+[sncast.sepolia]
+account = "starkshield_deployer"
+accounts-file = "/Users/nikhilkumar/.starknet_accounts/starknet_open_zeppelin_accounts.json"
+url = "https://api.cartridge.gg/x/starknet/sepolia"

@@ -3,8 +3,17 @@
  * Uses provider.callContract() for reads and account.execute() for writes.
  */
 
-import { type AccountInterface } from 'starknet';
-import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS } from './config';
+import { type AccountInterface, RpcProvider } from 'starknet';
+import { CONTRACT_ADDRESSES, IS_DEVNET, NETWORK, DEVNET_RESOURCE_BOUNDS, getRpcUrl } from './config';
+
+/** Get a direct RPC provider for read calls */
+function getProvider(): RpcProvider {
+  const provider = new RpcProvider({ nodeUrl: getRpcUrl() });
+  // Cartridge Sepolia RPC doesn't support "pending" block — use "latest"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (provider as any).channel.blockIdentifier = 'latest';
+  return provider;
+}
 
 const vaultAddr = () => CONTRACT_ADDRESSES.shieldedVault;
 const tokenAddr = () => CONTRACT_ADDRESSES.xyBTC;
@@ -12,8 +21,8 @@ const tokenAddr = () => CONTRACT_ADDRESSES.xyBTC;
 /** Get execute options — on devnet, skip fee estimation with fixed resource bounds */
 const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
 
-/** On devnet, MockProofVerifier always returns true — send minimal proof data to avoid large-calldata RPC issues */
-const devnetProofData = () => IS_DEVNET ? ['0xdeadbeef'] : null;
+/** MockProofVerifier always returns true — send minimal proof data on devnet/sepolia testnet */
+const mockProofData = () => (IS_DEVNET || NETWORK === 'sepolia') ? ['0xdeadbeef'] : null;
 
 /** Convert a bigint to 0x-prefixed hex string */
 function toHex(v: bigint): string {
@@ -24,6 +33,28 @@ function toHex(v: bigint): string {
 function u256Calldata(v: bigint): [string, string] {
   const mask = (BigInt(1) << BigInt(128)) - BigInt(1);
   return [toHex(v & mask), toHex(v >> BigInt(128))];
+}
+
+/**
+ * Mint test xyBTC tokens to the caller's address (testnet faucet).
+ * MockERC20 has a public mint function.
+ */
+export async function faucetMint(
+  account: AccountInterface,
+  toAddress: string,
+  amount: bigint,
+): Promise<string> {
+  const [amtLow, amtHigh] = u256Calldata(amount);
+  const result = await account.execute(
+    {
+      contractAddress: tokenAddr(),
+      entrypoint: 'mint',
+      calldata: [toAddress, amtLow, amtHigh],
+    },
+    undefined,
+    execOpts(),
+  );
+  return result.transaction_hash;
 }
 
 export interface ShieldParams {
@@ -92,7 +123,7 @@ export async function shield(
   params: ShieldParams,
 ): Promise<string> {
   const [amtLow, amtHigh] = u256Calldata(params.amount);
-  const proofElems = devnetProofData() ?? params.proofData;
+  const proofElems = mockProofData() ?? params.proofData;
   const calldata = [
     amtLow, amtHigh,                         // amount: u256
     toHex(params.newBalanceCommitment),        // new_balance_commitment: felt252
@@ -124,7 +155,7 @@ export async function unshield(
   params: ShieldParams,
 ): Promise<string> {
   const [amtLow, amtHigh] = u256Calldata(params.amount);
-  const proofElems = devnetProofData() ?? params.proofData;
+  const proofElems = mockProofData() ?? params.proofData;
   const calldata = [
     amtLow, amtHigh,
     toHex(params.newBalanceCommitment),
@@ -151,10 +182,11 @@ export async function unshield(
  * Read public balance for user.
  */
 export async function getPublicBalance(
-  account: AccountInterface,
+  _account: AccountInterface,
   userAddress: string
 ): Promise<bigint> {
-  const result = await account.callContract({
+  const provider = getProvider();
+  const result = await provider.callContract({
     contractAddress: vaultAddr(),
     entrypoint: 'get_public_balance',
     calldata: [userAddress],
@@ -168,10 +200,11 @@ export async function getPublicBalance(
  * Read the on-chain balance commitment for a user.
  */
 export async function getBalanceCommitment(
-  account: AccountInterface,
+  _account: AccountInterface,
   userAddress: string
 ): Promise<bigint> {
-  const result = await account.callContract({
+  const provider = getProvider();
+  const result = await provider.callContract({
     contractAddress: vaultAddr(),
     entrypoint: 'get_balance_commitment',
     calldata: [userAddress],
@@ -183,10 +216,11 @@ export async function getBalanceCommitment(
  * Read the encrypted balance ciphertext for a user.
  */
 export async function getBalanceCiphertext(
-  account: AccountInterface,
+  _account: AccountInterface,
   userAddress: string
 ): Promise<{ c1: bigint; c2: bigint }> {
-  const result = await account.callContract({
+  const provider = getProvider();
+  const result = await provider.callContract({
     contractAddress: vaultAddr(),
     entrypoint: 'get_encrypted_balance',
     calldata: [userAddress],
@@ -198,9 +232,10 @@ export async function getBalanceCiphertext(
  * Read the total deposited amount in the vault (public aggregate).
  */
 export async function getTotalDeposited(
-  account: AccountInterface
+  _account: AccountInterface
 ): Promise<bigint> {
-  const result = await account.callContract({
+  const provider = getProvider();
+  const result = await provider.callContract({
     contractAddress: vaultAddr(),
     entrypoint: 'get_total_deposited',
     calldata: [],

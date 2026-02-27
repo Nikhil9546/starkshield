@@ -213,12 +213,10 @@ fn test_mint_susd() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(500, 'debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.mint_susd('debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
-    assert(cdp.get_susd_balance(USER1()) == 500, 'wrong susd balance');
     assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_1', 'wrong debt commitment');
-    assert(cdp.get_total_debt_minted() == 500, 'wrong total debt');
     let (dc1, dc2) = cdp.get_encrypted_debt(USER1());
     assert(dc1 == 'dc1', 'wrong debt ct c1');
     assert(dc2 == 'dc2', 'wrong debt ct c2');
@@ -231,12 +229,11 @@ fn test_mint_susd_multiple() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(300, 'debt_commit_1', 'dc1a', 'dc2a', 'null_2', array![].span());
-    cdp.mint_susd(200, 'debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
+    cdp.mint_susd('debt_commit_1', 'dc1a', 'dc2a', 'null_2', array![].span());
+    cdp.mint_susd('debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
-    assert(cdp.get_susd_balance(USER1()) == 500, 'wrong susd after 2 mints');
-    assert(cdp.get_total_debt_minted() == 500, 'wrong total');
+    assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_2', 'wrong debt commit');
 }
 
 #[test]
@@ -246,7 +243,7 @@ fn test_mint_susd_no_collateral() {
 
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
-    cdp.mint_susd(500, 'debt_commit', 'dc1', 'dc2', 'null', array![].span());
+    cdp.mint_susd('debt_commit', 'dc1', 'dc2', 'null', array![].span());
 }
 
 #[test]
@@ -255,7 +252,7 @@ fn test_mint_susd_no_cdp() {
     let (_, _, _, cdp_addr, cdp) = setup();
 
     start_cheat_caller_address(cdp_addr, USER1());
-    cdp.mint_susd(500, 'debt_commit', 'dc1', 'dc2', 'null', array![].span());
+    cdp.mint_susd('debt_commit', 'dc1', 'dc2', 'null', array![].span());
 }
 
 // =============================================================================
@@ -269,13 +266,11 @@ fn test_repay_partial() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(1000, 'debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
-    cdp.repay(400, 'debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
+    cdp.mint_susd('debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.repay('debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
-    assert(cdp.get_susd_balance(USER1()) == 600, 'wrong susd after repay');
     assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_2', 'wrong debt commit');
-    assert(cdp.get_total_debt_minted() == 600, 'wrong total debt');
 }
 
 #[test]
@@ -285,12 +280,11 @@ fn test_repay_full() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(500, 'debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
-    cdp.repay(500, 'debt_commit_zero', 'dc1z', 'dc2z', 'null_3', array![].span());
+    cdp.mint_susd('debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.repay('debt_commit_zero', 'dc1z', 'dc2z', 'null_3', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
-    assert(cdp.get_susd_balance(USER1()) == 0, 'susd should be zero');
-    assert(cdp.get_total_debt_minted() == 0, 'total debt should be zero');
+    assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_zero', 'wrong debt commit');
 }
 
 #[test]
@@ -301,20 +295,11 @@ fn test_repay_no_debt() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(1000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.repay(100, 'debt_commit', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.repay('debt_commit', 'dc1', 'dc2', 'null_2', array![].span());
 }
 
-#[test]
-#[should_panic(expected: 'insufficient susd balance')]
-fn test_repay_insufficient_susd() {
-    let (_, _, _, cdp_addr, cdp) = setup();
-
-    start_cheat_caller_address(cdp_addr, USER1());
-    cdp.open_cdp();
-    cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(500, 'debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
-    cdp.repay(600, 'debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
-}
+// NOTE: test_repay_insufficient_susd removed -- plaintext balance check replaced by
+// cryptographic enforcement via debt_update_validity proof (new_debt >= 0).
 
 // =============================================================================
 // Close CDP tests
@@ -342,8 +327,8 @@ fn test_close_cdp_after_full_repay() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(500, 'debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
-    cdp.repay(500, 'debt_commit_zero', 'dc1z', 'dc2z', 'null_3', array![].span());
+    cdp.mint_susd('debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.repay('debt_commit_zero', 'dc1z', 'dc2z', 'null_3', array![].span());
     cdp.close_cdp('null_close', array![].span());
     stop_cheat_caller_address(cdp_addr);
 
@@ -390,7 +375,7 @@ fn test_mint_stale_oracle() {
     start_cheat_block_timestamp_global(5000);
 
     start_cheat_caller_address(cdp_addr, USER1());
-    cdp.mint_susd(500, 'debt_commit', 'dc1', 'dc2', 'null_2', array![].span());
+    cdp.mint_susd('debt_commit', 'dc1', 'dc2', 'null_2', array![].span());
 }
 
 // =============================================================================
@@ -466,9 +451,7 @@ fn test_initial_cdp_state() {
     assert(!cdp.has_cdp(USER1()), 'no cdp initially');
     assert(cdp.get_collateral_commitment(USER1()) == 0, 'no collateral commit');
     assert(cdp.get_debt_commitment(USER1()) == 0, 'no debt commit');
-    assert(cdp.get_susd_balance(USER1()) == 0, 'no susd');
     assert(cdp.get_locked_collateral(USER1()) == 0, 'no locked collateral');
-    assert(cdp.get_total_debt_minted() == 0, 'no total debt');
     assert(!cdp.is_in_liquidation(USER1()), 'not in liquidation');
     assert(!cdp.is_cdp_paused(), 'not paused');
 }
@@ -492,16 +475,16 @@ fn test_full_cdp_flow() {
     assert(cdp.get_locked_collateral(USER1()) == 5000, 'step2: collateral');
 
     // 3. Mint sUSD
-    cdp.mint_susd(1000, 'debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
-    assert(cdp.get_susd_balance(USER1()) == 1000, 'step3: susd');
+    cdp.mint_susd('debt_commit_1', 'dc1', 'dc2', 'null_2', array![].span());
+    assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_1', 'step3: debt commit');
 
     // 4. Partial repay
-    cdp.repay(600, 'debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
-    assert(cdp.get_susd_balance(USER1()) == 400, 'step4: susd');
+    cdp.repay('debt_commit_2', 'dc1b', 'dc2b', 'null_3', array![].span());
+    assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_2', 'step4: debt commit');
 
     // 5. Full repay remaining
-    cdp.repay(400, 'debt_commit_zero', 'dc1z', 'dc2z', 'null_4', array![].span());
-    assert(cdp.get_susd_balance(USER1()) == 0, 'step5: susd zero');
+    cdp.repay('debt_commit_zero', 'dc1z', 'dc2z', 'null_4', array![].span());
+    assert(cdp.get_debt_commitment(USER1()) == 'debt_commit_zero', 'step5: debt commit');
 
     // 6. Close CDP
     cdp.close_cdp('null_close', array![].span());
@@ -534,6 +517,6 @@ fn test_mint_replay_nullifier() {
     start_cheat_caller_address(cdp_addr, USER1());
     cdp.open_cdp();
     cdp.lock_collateral(10000, 'col_commit', 'cc1', 'cc2', 'null_1', array![].span());
-    cdp.mint_susd(100, 'debt_commit_1', 'dc1', 'dc2', 'same_null', array![].span());
-    cdp.mint_susd(100, 'debt_commit_2', 'dc1b', 'dc2b', 'same_null', array![].span());
+    cdp.mint_susd('debt_commit_1', 'dc1', 'dc2', 'same_null', array![].span());
+    cdp.mint_susd('debt_commit_2', 'dc1b', 'dc2b', 'same_null', array![].span());
 }

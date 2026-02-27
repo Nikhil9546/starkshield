@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { useBalance } from '../hooks/useBalance';
 import { useProof } from '../hooks/useProof';
@@ -8,10 +8,15 @@ import { CircuitType } from '../lib/proofs/circuits';
 import { pedersenHashNoir, toStarkFelt } from '../lib/privacy/encrypt';
 import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
 import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP } from '../lib/contracts/cdp';
+import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
 import type { CollateralRatioWitness, ZeroDebtWitness, RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
 
 type CDPAction = 'lock' | 'mint' | 'repay' | 'close';
+
+/** On devnet/sepolia, MockProofVerifier accepts anything — skip real proof generation */
+const SKIP_PROOFS = IS_DEVNET || NETWORK === 'sepolia';
+const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
 
 export default function CDPPage() {
   const { account, address } = useWallet();
@@ -22,7 +27,8 @@ export default function CDPPage() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
   const [hasCDP, setHasCDP] = useState<boolean | null>(null);
-  // Track locked collateral and minted debt locally (on-chain reads return 0 with MockProofVerifier)
+  // On devnet, on-chain reads may return 0 due to RPC quirks — track locally.
+  // On testnet/mainnet, on-chain state works correctly after proof-verified tx.
   const [localCollateral, setLocalCollateral] = useState<bigint>(BigInt(0));
   const [localDebt, setLocalDebt] = useState<bigint>(BigInt(0));
 
@@ -31,10 +37,16 @@ export default function CDPPage() {
     try {
       const exists = await checkHasCDP(account, address);
       setHasCDP(exists);
-    } catch {
-      setHasCDP(null);
+    } catch (err) {
+      console.warn('checkCDP failed:', err);
+      setHasCDP(false);
     }
   };
+
+  // Auto-check CDP status on wallet connect
+  useEffect(() => {
+    if (account && address) checkCDP();
+  }, [account, address]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleOpenCDP = async () => {
     if (!account) return;
@@ -69,7 +81,7 @@ export default function CDPPage() {
             commitment,
             max_value: BigInt(2) ** BigInt(64) - BigInt(1),
           };
-          const proof = await prove({ type: CircuitType.RANGE_PROOF, data: witness });
+          const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
           const hash = await lockCollateral(account, {
             amount: amountBig,
             commitment: toStarkFelt(commitment),
@@ -87,7 +99,18 @@ export default function CDPPage() {
         case 'mint': {
           const debtBlinding = BigInt(Math.floor(Math.random() * 1e15));
           // Circuit uses u64 amounts — scale to 1e8
-          const collateralU64 = localCollateral > BigInt(0) ? localCollateral : BigInt(Math.floor(parseFloat(amount) * 1e8 * 4));
+          // On testnet: use on-chain collateral (1e18 scale, convert to 1e8)
+          // On devnet: use local tracker (already 1e8 scale)
+          let collateralU64: bigint;
+          if (IS_DEVNET) {
+            collateralU64 = localCollateral > BigInt(0) ? localCollateral : BigInt(Math.floor(parseFloat(amount) * 1e8 * 4));
+          } else {
+            const onChainCollateral = balances.lockedCollateral ?? BigInt(0);
+            collateralU64 = onChainCollateral / BigInt(1e10); // 1e18 → 1e8
+            if (collateralU64 === BigInt(0)) {
+              throw new Error('No collateral locked. Lock collateral first.');
+            }
+          }
           const debtU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
           const [collateralCommitment, debtCommitment] = await Promise.all([
             pedersenHashNoir(collateralU64, blinding),
@@ -103,9 +126,8 @@ export default function CDPPage() {
             price: BigInt(50000 * 1e8), // placeholder BTC price
             min_ratio_percent: BigInt(200),
           };
-          const proof = await prove({ type: CircuitType.COLLATERAL_RATIO, data: witness });
+          const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.COLLATERAL_RATIO, data: witness });
           const hash = await mintSUSD(account, {
-            amount: amountBig,
             newCollateralCommitment: toStarkFelt(collateralCommitment),
             newDebtCommitment: toStarkFelt(debtCommitment),
             proofData: bytesToFelts(proof.proof),
@@ -120,7 +142,17 @@ export default function CDPPage() {
         case 'repay': {
           // Circuit uses u64 amounts — scale to 1e8
           const repayU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
-          const oldDebtU64 = localDebt > BigInt(0) ? localDebt : repayU64;
+          let oldDebtU64: bigint;
+          if (IS_DEVNET) {
+            oldDebtU64 = localDebt > BigInt(0) ? localDebt : repayU64;
+          } else {
+            // Debt is now commitment-only; use local tracker for amount
+            oldDebtU64 = localDebt > BigInt(0) ? localDebt : repayU64;
+            const debtCommit = balances.debtCommitment ?? BigInt(0);
+            if (debtCommit === BigInt(0) && localDebt === BigInt(0)) {
+              throw new Error('No debt to repay.');
+            }
+          }
           const newDebtU64 = oldDebtU64 > repayU64 ? oldDebtU64 - repayU64 : BigInt(0);
           const newBlinding = BigInt(Math.floor(Math.random() * 1e15));
           const deltaBlinding = BigInt(Math.floor(Math.random() * 1e15));
@@ -141,9 +173,8 @@ export default function CDPPage() {
             delta_commitment: deltaCommitment,
             is_repayment: true,
           };
-          const proof = await prove({ type: CircuitType.DEBT_UPDATE_VALIDITY, data: witness });
+          const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.DEBT_UPDATE_VALIDITY, data: witness });
           const hash = await repay(account, {
-            amount: amountBig,
             newDebtCommitment: toStarkFelt(newDebtCommitment),
             proofData: bytesToFelts(proof.proof),
             publicInputs: proof.publicInputs,
@@ -161,7 +192,7 @@ export default function CDPPage() {
             blinding,
             debt_commitment: zeroCommitment,
           };
-          const proof = await prove({ type: CircuitType.ZERO_DEBT, data: witness });
+          const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.ZERO_DEBT, data: witness });
           const hash = await closeCDP(account, {
             proofData: bytesToFelts(proof.proof),
             publicInputs: proof.publicInputs,
@@ -208,18 +239,18 @@ export default function CDPPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <BalanceDisplay
           label="Locked Collateral"
-          amount={localCollateral > BigInt(0) ? formatU64(localCollateral) : balances.lockedCollateral}
+          amount={IS_DEVNET && localCollateral > BigInt(0) ? formatU64(localCollateral) : balances.lockedCollateral}
           symbol="sxyBTC"
         />
         <BalanceDisplay
           label="sUSD Debt"
-          amount={localDebt > BigInt(0) ? formatU64(localDebt) : balances.susdBalance}
+          amount={IS_DEVNET && localDebt > BigInt(0) ? formatU64(localDebt) : (balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? 'Active' : 'None')}
           symbol="sUSD"
         />
         <BalanceDisplay
-          label="sUSD Balance"
-          amount={balances.susdBalance}
-          symbol="sUSD"
+          label="Debt Status"
+          amount={balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? 'Active' : 'None'}
+          symbol=""
         />
       </div>
 
