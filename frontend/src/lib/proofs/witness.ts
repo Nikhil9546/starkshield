@@ -178,13 +178,13 @@ export function generateWitnessInputs(
       const d = witness.data;
       inputs['total_collateral'] = toHex(d.total_collateral);
       inputs['total_debt'] = toHex(d.total_debt);
-      inputs['price'] = toHex(d.price);
-      inputs['min_ratio'] = toHex(d.min_ratio);
-      inputs['num_cdps'] = toHex(d.num_cdps);
       inputs['collateral_blinding'] = toHex(d.collateral_blinding);
       inputs['debt_blinding'] = toHex(d.debt_blinding);
       inputs['collateral_commitment'] = toHex(d.collateral_commitment);
       inputs['debt_commitment'] = toHex(d.debt_commitment);
+      inputs['price'] = toHex(d.price);
+      inputs['safety_ratio_percent'] = toHex(d.min_ratio);
+      inputs['num_cdps'] = toHex(d.num_cdps);
       break;
     }
   }

@@ -58,13 +58,21 @@ export default function ProofsPage() {
     }
   }, [account]);
 
+  const [solvencyStage, setSolvencyStage] = useState('');
+
   const handleSubmitSolvency = useCallback(async () => {
     if (!account) return;
     setSubmittingSolvency(true);
     setSubmitResult(null);
+    setSolvencyStage('');
     try {
-      const vaultTx = await submitVaultSolvencyProof(account);
-      const cdpTx = await submitCdpSafetyProof(account);
+      setSolvencyStage('Generating vault solvency proof...');
+      const vaultTx = await submitVaultSolvencyProof(account, (p) => setSolvencyStage(p.message));
+
+      setSolvencyStage('Generating CDP safety proof...');
+      const cdpTx = await submitCdpSafetyProof(account, (p) => setSolvencyStage(p.message));
+
+      setSolvencyStage('');
       setSubmitResult({
         success: true,
         message: `Proofs submitted! Vault tx: ${vaultTx.slice(0, 14)}... CDP tx: ${cdpTx.slice(0, 14)}...`,
@@ -74,6 +82,7 @@ export default function ProofsPage() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setSubmitResult({ success: false, message: message.slice(0, 200) });
+      setSolvencyStage('');
     } finally {
       setSubmittingSolvency(false);
     }
@@ -218,7 +227,7 @@ export default function ProofsPage() {
           {submittingSolvency ? (
             <span className="flex items-center gap-2">
               <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Submitting...
+              {solvencyStage || 'Submitting...'}
             </span>
           ) : (
             <span className="flex items-center gap-2">
