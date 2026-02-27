@@ -12,16 +12,17 @@ export default function WalletConnect() {
     return (
       <div className="flex items-center gap-3">
         {isDevnet && (
-          <span className="text-xs bg-yellow-900/40 text-yellow-400 border border-yellow-800/50 px-2 py-0.5 rounded">
-            Devnet
-          </span>
+          <span className="badge-yellow text-[10px]">Devnet</span>
         )}
-        <span className="text-sm text-gray-300 bg-gray-800 px-3 py-1.5 rounded font-mono">
-          {truncateAddress(address)}
-        </span>
+        <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1.5">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-slow" />
+          <span className="text-sm text-gray-300 font-mono tracking-tight">
+            {truncateAddress(address)}
+          </span>
+        </div>
         <button
           onClick={disconnect}
-          className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          className="text-xs text-gray-500 hover:text-gray-300 transition-colors duration-200"
         >
           Disconnect
         </button>
@@ -35,9 +36,14 @@ export default function WalletConnect() {
       <button
         onClick={connect}
         disabled={isConnecting}
-        className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
+        className="btn-primary text-sm"
       >
-        {isConnecting ? 'Connecting...' : isDevnet ? 'Connect to Devnet' : 'Connect Wallet'}
+        {isConnecting ? (
+          <span className="flex items-center gap-2">
+            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            Connecting...
+          </span>
+        ) : isDevnet ? 'Connect to Devnet' : 'Connect Wallet'}
       </button>
     </div>
   );

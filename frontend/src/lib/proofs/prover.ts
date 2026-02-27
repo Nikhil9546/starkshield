@@ -9,10 +9,12 @@ import { generateWitnessInputs, type CircuitWitness } from './witness';
 export interface ProofResult {
   proof: Uint8Array;
   publicInputs: string[];
+  provingTimeMs?: number;
+  proofSizeBytes?: number;
 }
 
 export interface ProofProgress {
-  stage: 'loading' | 'witnessing' | 'proving' | 'done' | 'error';
+  stage: 'loading' | 'witnessing' | 'proving' | 'encoding' | 'submitting' | 'confirming' | 'verified' | 'done' | 'error';
   percent: number;
   message: string;
 }
@@ -32,6 +34,8 @@ export async function generateProof(
   };
 
   try {
+    const startTime = performance.now();
+
     // Stage 1: Load circuit
     report('loading', 10, 'Loading circuit...');
     const circuit = await loadCircuit(witness.type);
@@ -58,13 +62,17 @@ export async function generateProof(
     const { witness: solvedWitness } = await noir.execute(inputs);
 
     report('proving', 85, 'Generating proof...');
-    const proof = await backend.generateProof(solvedWitness);
+    const proof = await backend.generateProof(solvedWitness, { keccakZK: true });
 
-    report('done', 100, 'Proof generated successfully');
+    const provingTimeMs = Math.round(performance.now() - startTime);
+
+    report('done', 100, `Proof generated in ${(provingTimeMs / 1000).toFixed(1)}s`);
 
     return {
       proof: proof.proof,
       publicInputs: proof.publicInputs.map(String),
+      provingTimeMs,
+      proofSizeBytes: proof.proof.length,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown proving error';

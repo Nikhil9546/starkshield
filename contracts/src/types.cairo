@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- types
+// Obscura v1.5 -- types
 //
 // Core type definitions for the privacy-preserving vault and CDP system.
 

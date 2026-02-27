@@ -26,36 +26,39 @@ export default function BalanceDisplay({
   shielded = false,
 }: Props) {
   const displayValue = () => {
-    if (amount === null) return <span className="text-gray-500">--</span>;
+    if (amount === null) return <span className="text-gray-600">--</span>;
     if (typeof amount === 'string') {
       return (
         <>
           {amount}
-          {symbol && <span className="text-sm text-gray-400 ml-1.5">{symbol}</span>}
+          {symbol && <span className="text-sm text-gray-500 ml-1.5 font-normal">{symbol}</span>}
         </>
       );
     }
     return (
       <>
         {formatAmount(amount, decimals)}
-        {symbol && <span className="text-sm text-gray-400 ml-1.5">{symbol}</span>}
+        {symbol && <span className="text-sm text-gray-500 ml-1.5 font-normal">{symbol}</span>}
       </>
     );
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-xs text-gray-400 uppercase tracking-wide">
+    <div className={`card-hover group ${shielded ? 'border-shield-500/20' : ''}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">
           {label}
         </span>
         {shielded && (
-          <span className="text-xs bg-shield-700/30 text-shield-300 px-1.5 py-0.5 rounded">
+          <span className="badge-shield text-[10px]">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="opacity-70">
+              <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            </svg>
             shielded
           </span>
         )}
       </div>
-      <div className="text-xl font-bold text-gray-100">
+      <div className="text-xl font-bold text-white tracking-tight">
         {displayValue()}
       </div>
     </div>

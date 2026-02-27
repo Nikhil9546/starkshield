@@ -1,0 +1,8 @@
+collateral = "5000000000"
+debt = "100000000"
+collateral_blinding = "212"
+debt_blinding = "401"
+collateral_commitment = "0x010a842af407c8dddc839a4fb4a9706a9addde057a47161cb76a5368d9ddc5dd"
+debt_commitment = "0x021fc76ed25ad9f4b8e9198b7650573500780ba66790701c1a6e228fd1315ce4"
+price = "5000000000000"
+min_ratio_percent = "200"

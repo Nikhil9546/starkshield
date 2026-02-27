@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- collateral_ratio circuit
+// Obscura v1.5 -- collateral_ratio circuit
 //
 // Proves that a CDP's collateral ratio meets the minimum requirement (MIN_CR).
 // Used during CDP operations (mint sUSD, repay) to ensure health.

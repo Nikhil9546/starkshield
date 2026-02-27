@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- zero_debt circuit
+// Obscura v1.5 -- zero_debt circuit
 //
 // Proves that a CDP's debt is exactly zero, which is required
 // before a position can be closed.

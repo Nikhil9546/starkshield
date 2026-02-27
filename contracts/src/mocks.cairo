@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- mocks
+// Obscura v1.5 -- mocks
 //
 // Mock contracts used for testing. Not deployed in production.
 

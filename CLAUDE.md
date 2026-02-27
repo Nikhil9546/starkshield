@@ -1,7 +1,7 @@
-# StarkShield v1.5 — Claude Code Configuration
+# Obscura v1.5 — Claude Code Configuration
 
 ## Project Overview
-StarkShield v1.5 is a privacy-preserving BTC DeFi protocol on Starknet. Users bridge BTC, deposit into ShieldedVault (which stakes via Endur and mints xyBTC), wrap into sxyBTC (encrypted balances via Tongo's ElGamal encryption), optionally supply to Vesu lending, open private CDPs using sxyBTC as collateral to mint shielded stablecoin sUSD, and withdraw/unshield back to public assets.
+Obscura v1.5 is a privacy-preserving BTC DeFi protocol on Starknet. Users bridge BTC, deposit into ShieldedVault (which stakes via Endur and mints xyBTC), wrap into sxyBTC (encrypted balances via Tongo's ElGamal encryption), optionally supply to Vesu lending, open private CDPs using sxyBTC as collateral to mint shielded stablecoin sUSD, and withdraw/unshield back to public assets.
 
 Privacy stack: ElGamal encrypted balances (Tongo) + ZK proofs (Noir circuits) verified on-chain via Garaga.
 
@@ -71,7 +71,7 @@ Privacy stack: ElGamal encrypted balances (Tongo) + ZK proofs (Noir circuits) ve
 ## Repository Structure
 
 ```
-starkshield/
+obscura/
 ├── CLAUDE.md                    # THIS FILE
 ├── AGENTS.md                    # Agent-executable instructions
 ├── README.md                    # Project documentation

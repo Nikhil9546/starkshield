@@ -11,9 +11,11 @@ export interface ProofRecord {
   status: 'pending' | 'proving' | 'verified' | 'failed';
   timestamp: number;
   txHash?: string;
+  provingTimeMs?: number;
+  proofSizeBytes?: number;
 }
 
-const STORAGE_KEY = 'starkshield_proof_history_';
+const STORAGE_KEY = 'obscura_proof_history_';
 const MAX_RECORDS = 50;
 
 /**

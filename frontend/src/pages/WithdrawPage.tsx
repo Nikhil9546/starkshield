@@ -5,17 +5,18 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenHashNoir, toStarkFelt, computeCiphertextDelta } from '../lib/privacy/encrypt';
+import { findValidBlinding, computeCiphertextDelta } from '../lib/privacy/encrypt';
 import { derivePublicKey } from '../lib/privacy/keygen';
-import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
+import { generateNullifier, bytesToFelts, encodeGaragaCalldata } from '../lib/proofs/calldata';
+import { loadVK } from '../lib/proofs/circuits';
 import { withdraw, unshield } from '../lib/contracts/vault';
-import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
+import { IS_DEVNET } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
 import { getLocalShieldedBalance, subtractShieldedBalance } from '../lib/shieldedBalance';
 import type { BalanceSufficiencyWitness } from '../lib/proofs/witness';
 
-/** On devnet/sepolia, MockProofVerifier accepts anything — skip real proof generation */
-const SKIP_PROOFS = IS_DEVNET || NETWORK === 'sepolia';
+/** On devnet, MockProofVerifier accepts anything — skip real proof generation */
+const SKIP_PROOFS = IS_DEVNET;
 const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
 
 export default function WithdrawPage() {
@@ -62,16 +63,14 @@ export default function WithdrawPage() {
     setIsUnshielding(true);
 
     try {
+      // Contract amount at 1e18 scale, circuit witness at 1e8 scale
       const amountBig = BigInt(Math.floor(parseFloat(unshieldAmount) * 1e18));
+      const amountWitness = BigInt(Math.floor(parseFloat(unshieldAmount) * 1e8));
       const publicKey = derivePublicKey(privacyKey);
 
-      // Circuit uses u64 for amounts — scale to 1e8
-      const amountWitness = BigInt(Math.floor(parseFloat(unshieldAmount) * 1e8));
-
-      // Use locally tracked shielded balance (devnet decryption returns garbage)
+      // Use locally tracked shielded balance (1e18 scale), convert to 1e8 for circuit
       const localShielded = getLocalShieldedBalance(address);
-      // Convert 1e18-scale local balance to 1e8-scale for circuit witness
-      const currentBalance = localShielded / BigInt(1e10);
+      const currentBalance = localShielded / BigInt(1e10); // 1e18 → 1e8
       if (currentBalance === BigInt(0)) {
         throw new Error('No shielded balance tracked. Shield funds first on the Stake page.');
       }
@@ -80,16 +79,11 @@ export default function WithdrawPage() {
       }
       const newBalance = currentBalance - amountWitness;
 
-      // Generate blindings
-      const balanceBlinding = BigInt(Math.floor(Math.random() * 1e15));
-      const amountBlinding = BigInt(Math.floor(Math.random() * 1e15));
-      const newBalanceBlinding = BigInt(Math.floor(Math.random() * 1e15));
-
-      // Compute commitments using real Barretenberg Pedersen hash (matches Noir circuit)
-      const [balanceCommitment, amountCommitment, newBalanceCommitment] = await Promise.all([
-        pedersenHashNoir(currentBalance, balanceBlinding),
-        pedersenHashNoir(amountWitness, amountBlinding),
-        pedersenHashNoir(newBalance, newBalanceBlinding),
+      // Find valid blindings that produce commitments within felt252 range
+      const [balResult, amtResult, newBalResult] = await Promise.all([
+        findValidBlinding(currentBalance, 100),
+        findValidBlinding(amountWitness, 300),
+        findValidBlinding(newBalance, 500),
       ]);
 
       // Build witness and generate proof
@@ -97,12 +91,12 @@ export default function WithdrawPage() {
         balance: currentBalance,
         amount: amountWitness,
         new_balance: newBalance,
-        balance_blinding: balanceBlinding,
-        amount_blinding: amountBlinding,
-        new_balance_blinding: newBalanceBlinding,
-        balance_commitment: balanceCommitment,
-        amount_commitment: amountCommitment,
-        new_balance_commitment: newBalanceCommitment,
+        balance_blinding: balResult.blinding,
+        amount_blinding: amtResult.blinding,
+        new_balance_blinding: newBalResult.blinding,
+        balance_commitment: balResult.commitment,
+        amount_commitment: amtResult.commitment,
+        new_balance_commitment: newBalResult.commitment,
       };
 
       const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.BALANCE_SUFFICIENCY, data: witness });
@@ -111,13 +105,22 @@ export default function WithdrawPage() {
       const delta = computeCiphertextDelta(amountBig, publicKey, false);
       const nullifier = generateNullifier();
 
+      // Encode proof as Garaga calldata (real verification) or bytesToFelts (mock)
+      let proofData: string[];
+      if (SKIP_PROOFS) {
+        proofData = bytesToFelts(proof.proof);
+      } else {
+        const vk = await loadVK(CircuitType.BALANCE_SUFFICIENCY);
+        proofData = await encodeGaragaCalldata(proof.proof, proof.publicInputs, vk);
+      }
+
       // Call vault.unshield()
       const hash = await unshield(account, {
         amount: amountBig,
-        newBalanceCommitment: toStarkFelt(newBalanceCommitment),
+        newBalanceCommitment: newBalResult.commitment,
         ctDeltaC1: delta.delta_c1,
         ctDeltaC2: delta.delta_c2,
-        proofData: bytesToFelts(proof.proof),
+        proofData,
         nullifier,
       });
 
@@ -153,15 +156,21 @@ export default function WithdrawPage() {
 
   if (!address) {
     return (
-      <div className="text-center py-16">
-        <h2 className="text-2xl font-bold mb-4">Withdraw</h2>
-        <p className="text-gray-400">Connect your wallet to withdraw.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mb-6">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
+            <path d="M8 12V4M8 4l-3 3M8 4l3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="text-shield-400" fill="none" />
+            <path d="M3 14h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-shield-400" fill="none" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Withdraw</h2>
+        <p className="text-gray-500 max-w-md">Connect your wallet to withdraw funds from the vault.</p>
       </div>
     );
   }
 
   const formatBalance = (val: bigint | null): string => {
-    if (val === null) return '—';
+    if (val === null) return '\u2014';
     const whole = val / BigInt(1e18);
     const frac = val % BigInt(1e18);
     const fracStr = frac.toString().padStart(18, '0').slice(0, 4);
@@ -170,11 +179,15 @@ export default function WithdrawPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Withdraw</h2>
-      <p className="text-gray-400">
-        Withdraw public xyBTC from the vault back to your wallet, or unshield encrypted sxyBTC first.
-      </p>
+      {/* Hero Header */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-white tracking-tight mb-1">Withdraw</h2>
+        <p className="text-gray-500">
+          Withdraw public xyBTC from the vault back to your wallet, or unshield encrypted sxyBTC first.
+        </p>
+      </div>
 
+      {/* Balance Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <BalanceDisplay
           label="Public Balance"
@@ -195,104 +208,124 @@ export default function WithdrawPage() {
       </div>
 
       {/* Unshield Section */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-2">Unshield Encrypted Balance</h3>
-        <p className="text-xs text-gray-500 mb-4">
+      <div className="card space-y-4">
+        <div className="flex items-center gap-3">
+          <h3 className="section-title">Unshield</h3>
+          <span className="badge-shield text-[10px]">ZK Proof Required</span>
+        </div>
+        <p className="text-xs text-gray-500">
           Convert encrypted sxyBTC back to public xyBTC balance. Requires privacy key and generates a ZK proof.
         </p>
 
         {!isKeyUnlocked ? (
-          <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-sm text-yellow-300">
+          <div className="alert-warning">
             Privacy key must be unlocked to unshield funds. Go to <strong>Settings</strong> to unlock.
           </div>
         ) : (
           <>
-            <div className="text-sm text-gray-400 mb-3">
-              Available shielded balance: {formatBalance(getLocalShieldedBalance(address))} sxyBTC
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="currentColor" strokeWidth="1.2" fill="none" className="text-shield-400" />
+              </svg>
+              Available: <span className="font-mono text-gray-300">{formatBalance(getLocalShieldedBalance(address))}</span> sxyBTC
             </div>
 
-            <div className="flex gap-3 mb-4">
+            <div className="flex gap-3">
               <input
                 type="number"
                 value={unshieldAmount}
                 onChange={(e) => setUnshieldAmount(e.target.value)}
-                placeholder="Amount to unshield (sxyBTC)"
+                placeholder="0.00"
                 min="0"
                 step="0.001"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+                className="input-field flex-1 font-mono"
               />
               <button
                 onClick={handleUnshield}
                 disabled={!unshieldAmount || isUnshielding || isProving || balancesLoading}
-                className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+                className="btn-primary"
               >
-                {isProving ? 'Proving...' : isUnshielding ? 'Unshielding...' : 'Unshield'}
+                {isProving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Proving...
+                  </span>
+                ) : isUnshielding ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Unshielding...
+                  </span>
+                ) : 'Unshield'}
               </button>
             </div>
 
             <ProofProgress progress={progress} error={proofError} />
 
             {unshieldTxHash && (
-              <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
-                <span className="text-green-400">Unshield transaction submitted: </span>
-                <span className="text-gray-300 font-mono text-xs break-all">{unshieldTxHash}</span>
+              <div className="tx-success">
+                <span className="text-emerald-400 font-medium">Unshield submitted </span>
+                <span className="text-gray-400 font-mono text-xs break-all">{unshieldTxHash}</span>
               </div>
             )}
 
             {unshieldTxError && (
-              <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
-                {unshieldTxError}
-              </div>
+              <div className="tx-error">{unshieldTxError}</div>
             )}
           </>
         )}
       </div>
 
       {/* Withdraw Section */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-2">Withdraw Public Balance</h3>
-        <p className="text-xs text-gray-500 mb-4">
-          Withdraws public (unshielded) xyBTC from the vault back to your wallet. No ZK proof needed.
-        </p>
+      <div className="card space-y-4">
+        <div>
+          <h3 className="section-title">Withdraw Public Balance</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Withdraws public (unshielded) xyBTC from the vault back to your wallet. No ZK proof needed.
+          </p>
+        </div>
 
-        <div className="flex gap-3 mb-4">
+        <div className="flex gap-3">
           <input
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="Amount (xyBTC)"
+            placeholder="0.00"
             min="0"
             step="0.001"
-            className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+            className="input-field flex-1 font-mono"
           />
           <button
             onClick={handleWithdraw}
             disabled={!amount || isSubmitting || balancesLoading}
-            className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+            className="btn-primary"
           >
-            {isSubmitting ? 'Withdrawing...' : 'Withdraw'}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Withdrawing...
+              </span>
+            ) : 'Withdraw'}
           </button>
         </div>
 
         {txHash && (
-          <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
-            <span className="text-green-400">Transaction submitted: </span>
-            <span className="text-gray-300 font-mono text-xs break-all">{txHash}</span>
+          <div className="tx-success">
+            <span className="text-emerald-400 font-medium">Transaction submitted </span>
+            <span className="text-gray-400 font-mono text-xs break-all">{txHash}</span>
           </div>
         )}
 
         {txError && (
-          <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
-            {txError}
-          </div>
+          <div className="tx-error">{txError}</div>
         )}
       </div>
 
       <button
         onClick={() => refresh()}
         disabled={balancesLoading}
-        className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+        className="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-2"
       >
+        {balancesLoading && <span className="w-3 h-3 border border-gray-500/30 border-t-gray-500 rounded-full animate-spin" />}
         {balancesLoading ? 'Refreshing...' : 'Refresh Balances'}
       </button>
     </div>

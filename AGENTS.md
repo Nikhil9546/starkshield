@@ -1,4 +1,4 @@
-# AGENTS.md — StarkShield v1.5 Agent-Executable Instructions
+# AGENTS.md — Obscura v1.5 Agent-Executable Instructions
 
 > This file provides deterministic, copy-paste-ready commands for AI coding agents.
 
@@ -6,7 +6,7 @@
 
 ```bash
 # 1. Clone and enter project
-git clone <repo-url> starkshield && cd starkshield
+git clone <repo-url> obscura && cd obscura
 
 # 2. Install Starknet toolchain
 curl --proto '=https' --tlsv1.2 -sSf https://sh.starkup.sh | sh

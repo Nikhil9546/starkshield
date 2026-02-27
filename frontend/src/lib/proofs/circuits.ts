@@ -30,6 +30,7 @@ export interface CompiledCircuit {
 }
 
 const circuitCache = new Map<CircuitType, CompiledCircuit>();
+const vkCache = new Map<CircuitType, Uint8Array>();
 
 /**
  * Load a compiled circuit artifact from the public directory.
@@ -50,6 +51,24 @@ export async function loadCircuit(type: CircuitType): Promise<CompiledCircuit> {
 }
 
 /**
+ * Load the verification key binary for a circuit type.
+ * VK files are stored as /public/circuits/<name>_vk.bin.
+ */
+export async function loadVK(type: CircuitType): Promise<Uint8Array> {
+  const cached = vkCache.get(type);
+  if (cached) return cached;
+
+  const response = await fetch(`/circuits/${type}_vk.bin`);
+  if (!response.ok) {
+    throw new Error(`Failed to load VK for ${type}: ${response.statusText}`);
+  }
+
+  const vk = new Uint8Array(await response.arrayBuffer());
+  vkCache.set(type, vk);
+  return vk;
+}
+
+/**
  * Preload all circuits into cache for faster proof generation.
  */
 export async function preloadCircuits(
@@ -63,4 +82,5 @@ export async function preloadCircuits(
  */
 export function clearCircuitCache(): void {
   circuitCache.clear();
+  vkCache.clear();
 }

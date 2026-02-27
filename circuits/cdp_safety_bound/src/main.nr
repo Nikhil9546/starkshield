@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- cdp_safety_bound circuit
+// Obscura v1.5 -- cdp_safety_bound circuit
 //
 // Proves the CDP domain aggregate safety bound: total collateral value
 // across all CDPs is sufficient to cover total debt with a safety margin.

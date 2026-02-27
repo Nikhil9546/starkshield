@@ -1,5 +1,5 @@
 /**
- * StarkShield v1.5 — Sepolia E2E Privacy-Hardened Flow Test
+ * Obscura v1.5 — Sepolia E2E Privacy-Hardened Flow Test
  *
  * Tests the complete lifecycle after privacy hardening:
  *   1. Approve token spending
@@ -97,7 +97,7 @@ async function main() {
   const G = `--account ${accountName} --accounts-file ${accountsFile} --wait`;
   const U = `--url ${rpcUrl}`;
 
-  console.log('=== StarkShield v1.5 — E2E Privacy-Hardened Flow Test ===\n');
+  console.log('=== Obscura v1.5 — E2E Privacy-Hardened Flow Test ===\n');
   console.log(`Network: Sepolia`);
   console.log(`Account: ${accountAddr}`);
   console.log(`Vault:   ${vaultAddr}`);

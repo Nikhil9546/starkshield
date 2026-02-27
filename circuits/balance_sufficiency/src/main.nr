@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- balance_sufficiency circuit
+// Obscura v1.5 -- balance_sufficiency circuit
 //
 // Proves that an encrypted balance is sufficient to cover a transfer amount,
 // and that the new balance is correctly computed as balance - amount.

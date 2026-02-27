@@ -4,7 +4,7 @@
  */
 
 import { type AccountInterface, RpcProvider } from 'starknet';
-import { CONTRACT_ADDRESSES, IS_DEVNET, NETWORK, DEVNET_RESOURCE_BOUNDS, getRpcUrl } from './config';
+import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS, getRpcUrl } from './config';
 
 /** Get a direct RPC provider for read calls */
 function getProvider(): RpcProvider {
@@ -21,8 +21,8 @@ const tokenAddr = () => CONTRACT_ADDRESSES.xyBTC;
 /** Get execute options — on devnet, skip fee estimation with fixed resource bounds */
 const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
 
-/** MockProofVerifier always returns true — send minimal proof data on devnet/sepolia testnet */
-const mockProofData = () => (IS_DEVNET || NETWORK === 'sepolia') ? ['0xdeadbeef'] : null;
+/** MockProofVerifier always returns true — send minimal proof data on devnet only */
+const mockProofData = () => IS_DEVNET ? ['0xdeadbeef'] : null;
 
 /** Convert a bigint to 0x-prefixed hex string */
 function toHex(v: bigint): string {

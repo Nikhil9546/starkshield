@@ -139,11 +139,41 @@ export async function pedersenHashNoir(
 }
 
 /**
+ * Check whether a BN254 field element fits in Starknet's felt252 range.
+ */
+export function fitsInFelt252(value: bigint): boolean {
+  return value < STARK_PRIME;
+}
+
+/**
  * Reduce a BN254 field element to fit in Starknet's felt252 range.
- * Use this when sending Pedersen hash commitments to on-chain contracts.
+ * WARNING: This changes the value and will mismatch the ZK proof's public input.
+ * Prefer using findValidBlinding() to get a commitment that natively fits.
+ * @deprecated Use findValidBlinding() instead for circuit-compatible commitments.
  */
 export function toStarkFelt(value: bigint): bigint {
   return value % STARK_PRIME;
+}
+
+/**
+ * Search for a blinding value that produces a Pedersen commitment within the
+ * Starknet felt252 range (< STARK_PRIME). Noir uses BN254 (~2^254) which is
+ * larger than the Stark prime (~2^251), so some commitments exceed felt252 range.
+ *
+ * This matches the E2E script's findValidBlinding() approach.
+ */
+export async function findValidBlinding(
+  value: bigint,
+  startBlinding: number = 1,
+  maxAttempts: number = 200,
+): Promise<{ blinding: bigint; commitment: bigint }> {
+  for (let b = startBlinding; b < startBlinding + maxAttempts; b++) {
+    const commitment = await pedersenHashNoir(value, BigInt(b));
+    if (commitment < STARK_PRIME) {
+      return { blinding: BigInt(b), commitment };
+    }
+  }
+  throw new Error(`Could not find valid blinding for value=${value} after ${maxAttempts} attempts`);
 }
 
 /**

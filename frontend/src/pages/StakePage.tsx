@@ -5,17 +5,18 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenHashNoir, toStarkFelt, computeCiphertextDelta } from '../lib/privacy/encrypt';
+import { findValidBlinding, computeCiphertextDelta } from '../lib/privacy/encrypt';
 import { derivePublicKey } from '../lib/privacy/keygen';
-import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
+import { generateNullifier, bytesToFelts, encodeGaragaCalldata } from '../lib/proofs/calldata';
+import { loadVK } from '../lib/proofs/circuits';
 import { deposit, shield, faucetMint } from '../lib/contracts/vault';
-import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
+import { IS_DEVNET } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
 import { addShieldedBalance, getLocalShieldedBalance } from '../lib/shieldedBalance';
 import type { RangeProofWitness } from '../lib/proofs/witness';
 
-/** On devnet/sepolia, MockProofVerifier accepts anything — skip real proof generation */
-const SKIP_PROOFS = IS_DEVNET || NETWORK === 'sepolia';
+/** On devnet, MockProofVerifier accepts anything — skip real proof generation */
+const SKIP_PROOFS = IS_DEVNET;
 const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
 
 export default function StakePage() {
@@ -83,18 +84,18 @@ export default function StakePage() {
     setIsShielding(true);
 
     try {
+      // Contract amount at 1e18 scale (matches on-chain token balances).
+      // Circuit witness at 1e8 scale (fits in u64 for Noir circuits).
+      // These are independent — the verifier only checks proof validity internally.
       const amountBig = BigInt(Math.floor(parseFloat(shieldAmount) * 1e18));
+      const amountWitness = BigInt(Math.floor(parseFloat(shieldAmount) * 1e8));
       const publicKey = derivePublicKey(privacyKey);
 
-      // Shield uses range_proof circuit (not balance_sufficiency).
-      // balance_sufficiency is for withdrawals (proves balance >= amount).
-      // For shielding, the on-chain contract checks public_balance >= amount;
-      // we just prove the amount is valid and properly committed.
       const MAX_U64 = BigInt(2) ** BigInt(64) - BigInt(1);
-      const amountWitness = BigInt(Math.floor(parseFloat(shieldAmount) * 1e8));
 
-      const blinding = BigInt(Math.floor(Math.random() * 1e15));
-      const commitment = await pedersenHashNoir(amountWitness, blinding);
+      // Find a blinding that produces a Pedersen commitment within felt252 range.
+      // This avoids the BN254 > STARK_PRIME truncation issue that breaks proof verification.
+      const { blinding, commitment } = await findValidBlinding(amountWitness);
 
       const witness: RangeProofWitness = {
         value: amountWitness,
@@ -105,24 +106,30 @@ export default function StakePage() {
 
       const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
 
-      // Compute ciphertext delta (isDeposit=true for shield)
       const delta = computeCiphertextDelta(amountBig, publicKey, true);
       const nullifier = generateNullifier();
 
-      // Call vault.shield()
+      // Encode proof as Garaga calldata (real verification) or bytesToFelts (mock)
+      let proofData: string[];
+      if (SKIP_PROOFS) {
+        proofData = bytesToFelts(proof.proof);
+      } else {
+        const vk = await loadVK(CircuitType.RANGE_PROOF);
+        proofData = await encodeGaragaCalldata(proof.proof, proof.publicInputs, vk);
+      }
+
       const hash = await shield(account, {
         amount: amountBig,
-        newBalanceCommitment: toStarkFelt(commitment),
+        newBalanceCommitment: commitment, // already < STARK_PRIME from findValidBlinding
         ctDeltaC1: delta.delta_c1,
         ctDeltaC2: delta.delta_c2,
-        proofData: bytesToFelts(proof.proof),
+        proofData,
         nullifier,
       });
 
       setShieldTxHash(hash);
       setShieldAmount('');
 
-      // Track shielded balance locally (devnet decryption returns garbage)
       addShieldedBalance(address, amountBig);
 
       addProofRecord(address, {
@@ -135,7 +142,9 @@ export default function StakePage() {
 
       setTimeout(() => refresh(), 5000);
     } catch (err) {
-      setShieldTxError(err instanceof Error ? err.message : 'Shield transaction failed');
+      console.error('[Shield] Error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setShieldTxError(msg);
       if (address) {
         addProofRecord(address, {
           id: crypto.randomUUID(),
@@ -151,15 +160,21 @@ export default function StakePage() {
 
   if (!address) {
     return (
-      <div className="text-center py-16">
-        <h2 className="text-2xl font-bold mb-4">Stake BTC</h2>
-        <p className="text-gray-400">Connect your wallet to start staking.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mb-6">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
+            <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="currentColor" strokeWidth="1.2" className="text-shield-400" fill="none" />
+            <path d="M8 5L11 6.75V10.25L8 12L5 10.25V6.75L8 5Z" fill="currentColor" className="text-shield-400" fillOpacity="0.3" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Stake BTC</h2>
+        <p className="text-gray-500 max-w-md">Connect your wallet to deposit BTC, stake via Endur, and shield into privacy-preserving sxyBTC.</p>
       </div>
     );
   }
 
   const formatBalance = (val: bigint | null): string => {
-    if (val === null) return '—';
+    if (val === null) return '\u2014';
     const whole = val / BigInt(1e18);
     const frac = val % BigInt(1e18);
     const fracStr = frac.toString().padStart(18, '0').slice(0, 4);
@@ -168,13 +183,16 @@ export default function StakePage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Stake BTC</h2>
-      <p className="text-gray-400">
-        Deposit BTC into the ShieldedVault. Your deposit is staked via Endur and wrapped
-        into privacy-preserving sxyBTC.
-      </p>
+      {/* Hero Header */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-white tracking-tight mb-1">Stake BTC</h2>
+        <p className="text-gray-500">
+          Deposit BTC into the ShieldedVault. Stake via Endur and wrap into privacy-preserving sxyBTC.
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Balance Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <BalanceDisplay
           label="Public Balance"
           amount={formatBalance(balances.publicBalance)}
@@ -198,86 +216,106 @@ export default function StakePage() {
         />
       </div>
 
+      {/* Alerts */}
       {!isKeyUnlocked && (
-        <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-sm text-yellow-300">
-          Privacy key locked. Go to <strong>Settings</strong> to generate or unlock your key to see decrypted shielded balances.
+        <div className="alert-warning flex items-start gap-3">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-0.5 flex-shrink-0">
+            <path d="M8 1L14.93 13H1.07L8 1z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+            <path d="M8 6v3M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          </svg>
+          <span>Privacy key locked. Go to <strong>Settings</strong> to generate or unlock your key for decrypted shielded balances.</span>
         </div>
       )}
 
       {balances.hasCDP && (
-        <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-3 text-sm text-blue-300">
-          You have an active CDP{balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? ' with outstanding debt' : ''}.
+        <div className="alert-info flex items-start gap-3">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-0.5 flex-shrink-0">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none" />
+            <path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          </svg>
+          <span>You have an active CDP{balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? ' with outstanding debt' : ''}.</span>
         </div>
       )}
 
       {/* Faucet */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold">Testnet Faucet</h3>
-            <p className="text-xs text-gray-500">Mint 100 test xyBTC tokens to your wallet</p>
-          </div>
-          <button
-            onClick={handleFaucet}
-            disabled={isMinting}
-            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 text-gray-200 text-sm font-medium px-4 py-1.5 rounded transition-colors"
-          >
-            {isMinting ? 'Minting...' : 'Get Test Tokens'}
-          </button>
+      <div className="card flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Testnet Faucet</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Mint 100 test xyBTC tokens to your wallet</p>
         </div>
-        {faucetMsg && (
-          <p className="mt-2 text-xs text-gray-400 break-all">{faucetMsg}</p>
-        )}
+        <button
+          onClick={handleFaucet}
+          disabled={isMinting}
+          className="btn-secondary text-sm"
+        >
+          {isMinting ? (
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 border-2 border-gray-400/30 border-t-gray-400 rounded-full animate-spin" />
+              Minting...
+            </span>
+          ) : 'Get Test Tokens'}
+        </button>
       </div>
+      {faucetMsg && (
+        <p className="text-xs text-gray-400 break-all px-1 -mt-4">{faucetMsg}</p>
+      )}
 
       {/* Deposit Section */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">Deposit</h3>
-        <p className="text-xs text-gray-500 mb-3">
-          Deposits xyBTC into the vault as public balance. No ZK proof needed for public deposits.
-        </p>
+      <div className="card space-y-4">
+        <div>
+          <h3 className="section-title">Deposit</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Deposit xyBTC into the vault as public balance. No ZK proof needed.
+          </p>
+        </div>
         <div className="flex gap-3">
           <input
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="Amount (BTC)"
+            placeholder="0.00"
             min="0"
             step="0.001"
-            className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+            className="input-field flex-1 font-mono"
           />
           <button
             onClick={handleDeposit}
             disabled={!amount || isSubmitting || balancesLoading}
-            className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+            className="btn-primary"
           >
-            {isSubmitting ? 'Depositing...' : 'Deposit & Stake'}
+            {isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Depositing...
+              </span>
+            ) : 'Deposit & Stake'}
           </button>
         </div>
 
         {txHash && (
-          <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
-            <span className="text-green-400">Transaction submitted: </span>
-            <span className="text-gray-300 font-mono text-xs break-all">{txHash}</span>
+          <div className="tx-success">
+            <span className="text-emerald-400 font-medium">Transaction submitted </span>
+            <span className="text-gray-400 font-mono text-xs break-all">{txHash}</span>
           </div>
         )}
 
         {txError && (
-          <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
-            {txError}
-          </div>
+          <div className="tx-error">{txError}</div>
         )}
       </div>
 
       {/* Shield Section */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">Shield</h3>
-        <p className="text-xs text-gray-500 mb-3">
+      <div className="card space-y-4">
+        <div className="flex items-center gap-3">
+          <h3 className="section-title">Shield</h3>
+          <span className="badge-shield text-[10px]">ZK Proof Required</span>
+        </div>
+        <p className="text-xs text-gray-500">
           Convert public balance to encrypted sxyBTC. Requires privacy key and generates a ZK proof.
         </p>
 
         {!isKeyUnlocked ? (
-          <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-sm text-yellow-300">
+          <div className="alert-warning">
             Privacy key must be unlocked to shield funds. Go to <strong>Settings</strong> to unlock.
           </div>
         ) : (
@@ -287,33 +325,36 @@ export default function StakePage() {
                 type="number"
                 value={shieldAmount}
                 onChange={(e) => setShieldAmount(e.target.value)}
-                placeholder="Amount to shield (xyBTC)"
+                placeholder="0.00"
                 min="0"
                 step="0.001"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+                className="input-field flex-1 font-mono"
               />
               <button
                 onClick={handleShield}
                 disabled={!shieldAmount || isShielding || isProving || balancesLoading}
-                className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+                className="btn-primary"
               >
-                {isProving ? 'Proving...' : isShielding ? 'Shielding...' : 'Shield'}
+                {isProving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Proving...
+                  </span>
+                ) : isShielding ? 'Shielding...' : 'Shield'}
               </button>
             </div>
 
             <ProofProgress progress={progress} error={proofError} />
 
             {shieldTxHash && (
-              <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
-                <span className="text-green-400">Shield transaction submitted: </span>
-                <span className="text-gray-300 font-mono text-xs break-all">{shieldTxHash}</span>
+              <div className="tx-success">
+                <span className="text-emerald-400 font-medium">Shield transaction submitted </span>
+                <span className="text-gray-400 font-mono text-xs break-all">{shieldTxHash}</span>
               </div>
             )}
 
             {shieldTxError && (
-              <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
-                {shieldTxError}
-              </div>
+              <div className="tx-error">{shieldTxError}</div>
             )}
           </>
         )}
@@ -322,8 +363,9 @@ export default function StakePage() {
       <button
         onClick={() => refresh()}
         disabled={balancesLoading}
-        className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+        className="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-2"
       >
+        {balancesLoading && <span className="w-3 h-3 border border-gray-500/30 border-t-gray-500 rounded-full animate-spin" />}
         {balancesLoading ? 'Refreshing...' : 'Refresh Balances'}
       </button>
     </div>

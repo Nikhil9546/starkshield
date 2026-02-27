@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- solvency_prover
+// Obscura v1.5 -- solvency_prover
 //
 // Per-domain solvency verification for Vault and CDP domains.
 // An authorized prover submits ZK proofs periodically. The contract verifies
@@ -142,19 +142,8 @@ pub mod SolvencyProver {
                 contract_address: self.proof_verifier.read(),
             };
 
-            // Public inputs for vault_solvency: assets_commitment, liabilities_commitment, num_accounts
-            let mut public_inputs: Array<felt252> = array![
-                assets_commitment,
-                liabilities_commitment,
-                num_accounts.into(),
-            ];
-
             let verified = verifier
-                .verify(
-                    ProofTypes::VAULT_SOLVENCY,
-                    public_inputs.span(),
-                    proof_data,
-                );
+                .verify(ProofTypes::VAULT_SOLVENCY, proof_data);
             assert(verified, 'vault solvency proof failed');
 
             // Record verified state
@@ -202,21 +191,8 @@ pub mod SolvencyProver {
                 contract_address: self.proof_verifier.read(),
             };
 
-            // Public inputs: collateral_commitment, debt_commitment, price, safety_ratio_percent, num_cdps
-            let mut public_inputs: Array<felt252> = array![
-                collateral_commitment,
-                debt_commitment,
-                price.into(),
-                safety_ratio_percent.into(),
-                num_cdps.into(),
-            ];
-
             let verified = verifier
-                .verify(
-                    ProofTypes::CDP_SAFETY_BOUND,
-                    public_inputs.span(),
-                    proof_data,
-                );
+                .verify(ProofTypes::CDP_SAFETY_BOUND, proof_data);
             assert(verified, 'cdp safety proof failed');
 
             // Record verified state

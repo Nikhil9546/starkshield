@@ -1,6 +1,7 @@
 /**
  * Garaga calldata encoding for on-chain proof verification.
- * Converts proof bytes + public inputs into Starknet calldata format.
+ * Uses the garaga npm package for real calldata generation,
+ * with a bytesToFelts fallback for mock/devnet mode.
  */
 
 import { PROOF_TYPE_IDS, type CircuitType } from './circuits';
@@ -21,8 +22,6 @@ export function encodeCalldata(
   publicInputs: string[]
 ): StarknetCalldata {
   const proofType = PROOF_TYPE_IDS[circuitType];
-
-  // Convert proof bytes to felt252 array (31-byte chunks for Starknet)
   const proofData = bytesToFelts(proof);
 
   return {
@@ -33,8 +32,43 @@ export function encodeCalldata(
 }
 
 /**
+ * Encode proof + public inputs + VK into Garaga-compatible calldata using the garaga npm package.
+ * Returns an array of hex strings ready to be passed as Span<felt252> to the verifier.
+ *
+ * garaga.getZKHonkCallData(proof: Uint8Array, publicInputs: Uint8Array, vk: Uint8Array): bigint[]
+ * publicInputs must be a flat Uint8Array of 32-byte big-endian field elements.
+ */
+export async function encodeGaragaCalldata(
+  proof: Uint8Array,
+  publicInputs: string[],
+  vk: Uint8Array,
+): Promise<string[]> {
+  // Dynamic import to avoid loading WASM on page load
+  const garaga = await import('garaga');
+  if (garaga.init) {
+    await garaga.init();
+  }
+
+  // Convert hex string public inputs to flat Uint8Array (32 bytes each, big-endian)
+  const piBytes = new Uint8Array(publicInputs.length * 32);
+  for (let i = 0; i < publicInputs.length; i++) {
+    const hex = publicInputs[i].replace(/^0x/, '').padStart(64, '0');
+    for (let j = 0; j < 32; j++) {
+      piBytes[i * 32 + j] = parseInt(hex.slice(j * 2, j * 2 + 2), 16);
+    }
+  }
+
+  const calldata: bigint[] = garaga.getZKHonkCallData(proof, piBytes, vk);
+  // garaga returns [span_length, elem0, elem1, ...] — strip the length prefix
+  // because vault.ts/cdp.ts add their own Span length when building calldata.
+  const hexCalldata = calldata.map((v: bigint) => '0x' + v.toString(16));
+  return hexCalldata.slice(1);
+}
+
+/**
  * Convert a byte array to an array of felt252 strings.
  * Each felt252 holds up to 31 bytes (248 bits < 252 bits).
+ * Used as fallback for devnet/mock mode.
  */
 export function bytesToFelts(bytes: Uint8Array): string[] {
   const FELT_BYTES = 31;
@@ -54,7 +88,6 @@ export function bytesToFelts(bytes: Uint8Array): string[] {
 
 /**
  * Build the full calldata array for a ShieldedVault or ShieldedCDP contract call.
- * Includes: [proof_type, proof_len, ...proof_data, public_inputs_len, ...public_inputs, nullifier, ...extra_args]
  */
 export function buildContractCalldata(
   circuitType: CircuitType,
@@ -78,7 +111,6 @@ export function buildContractCalldata(
 
 /**
  * Generate a unique nullifier for replay protection.
- * Combines the circuit type, user address, and a random nonce.
  */
 export function generateNullifier(): bigint {
   const bytes = new Uint8Array(32);

@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- debt_update_validity circuit
+// Obscura v1.5 -- debt_update_validity circuit
 //
 // Proves that a debt state transition is valid:
 //   - Borrow: new_debt = old_debt + delta

@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- range_proof circuit
+// Obscura v1.5 -- range_proof circuit
 //
 // Proves that a private value lies within [0, max_value]
 // and is correctly bound to the given Pedersen commitment.

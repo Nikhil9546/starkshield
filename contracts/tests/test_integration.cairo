@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- Integration tests
+// Obscura v1.5 -- Integration tests
 //
 // Full E2E flow: deposit → shield → open CDP → lock collateral → mint sUSD →
 //                repay sUSD → close CDP → unshield → withdraw
@@ -11,11 +11,11 @@ use snforge_std::{
     declare, DeclareResultTrait, ContractClassTrait, start_cheat_caller_address,
     stop_cheat_caller_address, start_cheat_block_timestamp_global,
 };
-use starkshield::interfaces::{
+use obscura::interfaces::{
     IShieldedVaultDispatcher, IShieldedVaultDispatcherTrait, IShieldedCDPDispatcher,
     IShieldedCDPDispatcherTrait, ISolvencyProverDispatcher, ISolvencyProverDispatcherTrait,
 };
-use starkshield::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
+use obscura::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
 
 // =============================================================================
 // Addresses

@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- SolvencyProver tests
+// Obscura v1.5 -- SolvencyProver tests
 //
 // Tests: vault solvency proof submission, CDP safety proof submission,
 // unauthorized prover rejection, invalid proof rejection, pause behavior,
@@ -10,8 +10,8 @@ use snforge_std::{
     declare, DeclareResultTrait, ContractClassTrait, start_cheat_caller_address,
     stop_cheat_caller_address, start_cheat_block_timestamp_global,
 };
-use starkshield::interfaces::{ISolvencyProverDispatcher, ISolvencyProverDispatcherTrait};
-use starkshield::mocks::mock_verifier::{
+use obscura::interfaces::{ISolvencyProverDispatcher, ISolvencyProverDispatcherTrait};
+use obscura::mocks::mock_verifier::{
     IMockProofVerifierDispatcher, IMockProofVerifierDispatcherTrait,
 };
 

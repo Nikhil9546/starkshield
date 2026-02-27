@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- ShieldedVault unit tests
+// Obscura v1.5 -- ShieldedVault unit tests
 //
 // Tests: deposit, withdraw, shield, unshield, view functions, pause/unpause.
 
@@ -8,8 +8,8 @@ use snforge_std::{
     declare, DeclareResultTrait, ContractClassTrait, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starkshield::interfaces::{IShieldedVaultDispatcher, IShieldedVaultDispatcherTrait};
-use starkshield::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
+use obscura::interfaces::{IShieldedVaultDispatcher, IShieldedVaultDispatcherTrait};
+use obscura::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
 
 // =============================================================================
 // Test helpers

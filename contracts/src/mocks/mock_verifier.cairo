@@ -8,7 +8,6 @@ pub trait IMockProofVerifier<TContractState> {
 
 #[starknet::contract]
 pub mod MockProofVerifier {
-    use starknet::ContractAddress;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use crate::interfaces::IProofVerifier;
 
@@ -27,16 +26,15 @@ pub mod MockProofVerifier {
         fn verify(
             self: @ContractState,
             circuit_type: u8,
-            public_inputs: Span<felt252>,
-            proof: Span<felt252>,
+            full_proof_with_hints: Span<felt252>,
         ) -> bool {
             self.should_verify.read()
         }
 
-        fn set_verifier(
+        fn set_verifier_class_hash(
             ref self: ContractState,
             circuit_type: u8,
-            verifier_address: ContractAddress,
+            class_hash: felt252,
         ) {
             // No-op in mock
         }

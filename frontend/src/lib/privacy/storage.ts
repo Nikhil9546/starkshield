@@ -6,8 +6,8 @@
 
 import { serializeKeyPair, deserializeKeyPair, type ElGamalKeyPair } from './keygen';
 
-const STORAGE_KEY_PREFIX = 'starkshield_key_';
-const SALT_KEY = 'starkshield_salt';
+const STORAGE_KEY_PREFIX = 'obscura_key_';
+const SALT_KEY = 'obscura_salt';
 
 /**
  * Derive an AES-GCM encryption key from a password using PBKDF2.

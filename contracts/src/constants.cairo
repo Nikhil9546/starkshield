@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- constants
+// Obscura v1.5 -- constants
 //
 // Protocol-level constants. MIN_CR is hardcoded for v1.5 (not governance-controlled).
 

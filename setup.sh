@@ -1,6 +1,6 @@
 #!/bin/bash
 # ===========================================================
-# StarkShield v1.5 — Full Development Environment Setup
+# Obscura v1.5 — Full Development Environment Setup
 # ===========================================================
 # Run: chmod +x setup.sh && ./setup.sh
 # Requires: Linux/macOS, curl, git, Python 3.10, Node.js 18+
@@ -162,7 +162,7 @@ mkdir -p contracts/src contracts/tests
 if [ ! -f "contracts/Scarb.toml" ]; then
     cat > contracts/Scarb.toml << 'EOF'
 [package]
-name = "starkshield"
+name = "obscura"
 version = "0.1.0"
 edition = "2024_07"
 cairo-version = "2.11.4"
@@ -198,7 +198,7 @@ fi
 # Create placeholder Cairo files
 for file in types constants interfaces shielded_vault shielded_cdp proof_verifiers solvency_prover; do
     if [ ! -f "contracts/src/${file}.cairo" ]; then
-        echo "// StarkShield v1.5 — ${file}" > "contracts/src/${file}.cairo"
+        echo "// Obscura v1.5 — ${file}" > "contracts/src/${file}.cairo"
         echo "// TODO: Implement per PRD spec" >> "contracts/src/${file}.cairo"
     fi
 done
@@ -213,7 +213,7 @@ for circuit in $CIRCUITS; do
 [package]
 name = "${circuit}"
 type = "bin"
-authors = ["StarkShield"]
+authors = ["Obscura"]
 compiler_version = ">=1.0.0-beta.16"
 
 [dependencies]
@@ -221,7 +221,7 @@ EOF
     fi
     if [ ! -f "circuits/${circuit}/src/main.nr" ]; then
         cat > "circuits/${circuit}/src/main.nr" << EOF
-// StarkShield v1.5 — ${circuit} circuit
+// Obscura v1.5 — ${circuit} circuit
 // TODO: Implement per PRD spec section 6
 
 fn main() {
@@ -243,7 +243,7 @@ mkdir -p frontend/src/{pages,components,lib/{privacy,proofs,contracts},hooks}
 if [ ! -f "frontend/package.json" ]; then
     cat > frontend/package.json << 'EOF'
 {
-  "name": "starkshield-frontend",
+  "name": "obscura-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -328,7 +328,7 @@ fi
 mkdir -p scripts
 for script in deploy seed-fixtures generate-vks; do
     if [ ! -f "scripts/${script}.ts" ]; then
-        echo "// StarkShield v1.5 — ${script}" > "scripts/${script}.ts"
+        echo "// Obscura v1.5 — ${script}" > "scripts/${script}.ts"
         echo "// TODO: Implement" >> "scripts/${script}.ts"
     fi
 done
@@ -416,7 +416,7 @@ section "7/7 — Setup Complete"
 # -----------------------------------------------------------
 
 echo ""
-log "StarkShield v1.5 development environment is ready!"
+log "Obscura v1.5 development environment is ready!"
 echo ""
 echo -e "${CYAN}Project Structure:${NC}"
 echo "  contracts/     — Cairo smart contracts (Scarb)"

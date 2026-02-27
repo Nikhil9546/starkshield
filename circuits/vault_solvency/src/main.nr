@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- vault_solvency circuit
+// Obscura v1.5 -- vault_solvency circuit
 //
 // Proves that the ShieldedVault is solvent: total assets >= total liabilities.
 // This is a per-domain solvency proof (vault domain only, no cross-domain coupling).

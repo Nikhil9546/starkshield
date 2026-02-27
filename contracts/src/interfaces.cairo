@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- interfaces
+// Obscura v1.5 -- interfaces
 //
 // Trait definitions for all protocol contracts.
 
@@ -209,21 +209,21 @@ pub trait ISolvencyProver<TContractState> {
 }
 
 /// Interface for ZK proof verification.
-/// Routes verification calls to the appropriate Garaga-generated verifier contract.
+/// Routes verification calls to the appropriate Garaga-generated verifier via class hash dispatch.
 #[starknet::interface]
 pub trait IProofVerifier<TContractState> {
     /// Verify a ZK proof for the given circuit type.
+    /// full_proof_with_hints contains the complete Garaga calldata blob.
     fn verify(
         self: @TContractState,
         circuit_type: u8,
-        public_inputs: Span<felt252>,
-        proof: Span<felt252>,
+        full_proof_with_hints: Span<felt252>,
     ) -> bool;
 
-    /// Set the verifier contract address for a circuit type (owner only).
-    fn set_verifier(
+    /// Set the verifier class hash for a circuit type (owner only).
+    fn set_verifier_class_hash(
         ref self: TContractState,
         circuit_type: u8,
-        verifier_address: ContractAddress,
+        class_hash: felt252,
     );
 }

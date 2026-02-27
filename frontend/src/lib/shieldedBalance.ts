@@ -8,7 +8,7 @@
  * Stored as a raw bigint string (1e18 scale) keyed by wallet address.
  */
 
-const STORAGE_KEY = 'starkshield_shielded_balance_';
+const STORAGE_KEY = 'obscura_shielded_balance_';
 
 function key(walletAddress: string): string {
   return STORAGE_KEY + walletAddress.toLowerCase();

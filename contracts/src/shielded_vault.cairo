@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- shielded_vault
+// Obscura v1.5 -- shielded_vault
 //
 // The ShieldedVault accepts public xyBTC deposits, allows users to "shield" their
 // balance into encrypted sxyBTC (Pedersen-committed on-chain, ElGamal-encrypted
@@ -199,20 +199,12 @@ pub mod ShieldedVault {
             if old_commitment == ZERO_COMMITMENT {
                 // First shield: range_proof verifies the amount is valid
                 let verified = verifier
-                    .verify(
-                        ProofTypes::RANGE_PROOF,
-                        array![new_balance_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::RANGE_PROOF, proof_data);
                 assert(verified, 'range proof failed');
             } else {
                 // Subsequent: debt_update_validity proves new = old + delta
                 let verified = verifier
-                    .verify(
-                        ProofTypes::DEBT_UPDATE_VALIDITY,
-                        array![old_commitment, new_balance_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::DEBT_UPDATE_VALIDITY, proof_data);
                 assert(verified, 'update proof failed');
             }
 
@@ -260,11 +252,7 @@ pub mod ShieldedVault {
                 contract_address: self.proof_verifier.read(),
             };
             let verified = verifier
-                .verify(
-                    ProofTypes::BALANCE_SUFFICIENCY,
-                    array![old_commitment, new_balance_commitment].span(),
-                    proof_data,
-                );
+                .verify(ProofTypes::BALANCE_SUFFICIENCY, proof_data);
             assert(verified, 'balance proof failed');
 
             // State mutation (only after proof verification)

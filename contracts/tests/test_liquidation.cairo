@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- Liquidation Mode A tests
+// Obscura v1.5 -- Liquidation Mode A tests
 //
 // Tests: trigger liquidation, disclosure window, prove health, execute liquidation,
 // conservative seizure, timeout behavior, cancellation.
@@ -9,9 +9,9 @@ use snforge_std::{
     declare, DeclareResultTrait, ContractClassTrait, start_cheat_caller_address,
     stop_cheat_caller_address, start_cheat_block_timestamp_global,
 };
-use starkshield::interfaces::{IShieldedCDPDispatcher, IShieldedCDPDispatcherTrait};
-use starkshield::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
-use starkshield::mocks::mock_verifier::{
+use obscura::interfaces::{IShieldedCDPDispatcher, IShieldedCDPDispatcherTrait};
+use obscura::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
+use obscura::mocks::mock_verifier::{
     IMockProofVerifierDispatcher, IMockProofVerifierDispatcherTrait,
 };
 

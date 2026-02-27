@@ -5,18 +5,61 @@ import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import { CircuitType } from '../lib/proofs/circuits';
-import { pedersenHashNoir, toStarkFelt } from '../lib/privacy/encrypt';
-import { generateNullifier, bytesToFelts } from '../lib/proofs/calldata';
-import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP } from '../lib/contracts/cdp';
+import { findValidBlinding } from '../lib/privacy/encrypt';
+import { generateNullifier, bytesToFelts, encodeGaragaCalldata } from '../lib/proofs/calldata';
+import { loadVK } from '../lib/proofs/circuits';
+import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP, checkOracleFreshness, refreshOracle } from '../lib/contracts/cdp';
+import { faucetMint } from '../lib/contracts/vault';
 import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
 import type { CollateralRatioWitness, ZeroDebtWitness, RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
 
 type CDPAction = 'lock' | 'mint' | 'repay' | 'close';
 
-/** On devnet/sepolia, MockProofVerifier accepts anything — skip real proof generation */
-const SKIP_PROOFS = IS_DEVNET || NETWORK === 'sepolia';
+/** On devnet, MockProofVerifier accepts anything — skip real proof generation */
+const SKIP_PROOFS = IS_DEVNET;
 const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
+
+const ACTION_META: Record<CDPAction, { label: string; icon: JSX.Element; description: string }> = {
+  lock: {
+    label: 'Lock Collateral',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="6" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <path d="M5 6V4a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      </svg>
+    ),
+    description: 'Lock sxyBTC as collateral in your CDP',
+  },
+  mint: {
+    label: 'Mint sUSD',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      </svg>
+    ),
+    description: 'Mint stablecoin against your collateral (200% min ratio)',
+  },
+  repay: {
+    label: 'Repay',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M4 8h8M4 8l3-3M4 8l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </svg>
+    ),
+    description: 'Repay outstanding sUSD debt',
+  },
+  close: {
+    label: 'Close CDP',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      </svg>
+    ),
+    description: 'Close your CDP and return collateral (requires zero debt)',
+  },
+};
 
 export default function CDPPage() {
   const { account, address } = useWallet();
@@ -31,6 +74,26 @@ export default function CDPPage() {
   // On testnet/mainnet, on-chain state works correctly after proof-verified tx.
   const [localCollateral, setLocalCollateral] = useState<bigint>(BigInt(0));
   const [localDebt, setLocalDebt] = useState<bigint>(BigInt(0));
+  const [oracleStale, setOracleStale] = useState<boolean>(false);
+  const [refreshingOracle, setRefreshingOracle] = useState(false);
+  const [isMintingCDP, setIsMintingCDP] = useState(false);
+  const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
+
+  const handleFaucetCDP = async () => {
+    if (!account || !address) return;
+    setIsMintingCDP(true);
+    setFaucetMsg(null);
+    try {
+      const mintAmount = BigInt(100) * BigInt(10) ** BigInt(18);
+      const hash = await faucetMint(account, address, mintAmount);
+      setFaucetMsg(`Minted 100 xyBTC! tx: ${hash.substring(0, 20)}...`);
+      setTimeout(() => refresh(), 5000);
+    } catch (err) {
+      setFaucetMsg(err instanceof Error ? err.message : 'Faucet failed');
+    } finally {
+      setIsMintingCDP(false);
+    }
+  };
 
   const checkCDP = async () => {
     if (!account || !address) return;
@@ -43,10 +106,29 @@ export default function CDPPage() {
     }
   };
 
-  // Auto-check CDP status on wallet connect
+  // Auto-check CDP status and oracle freshness on wallet connect
   useEffect(() => {
-    if (account && address) checkCDP();
+    if (account && address) {
+      checkCDP();
+      checkOracleFreshness(account)
+        .then(({ fresh }) => setOracleStale(!fresh))
+        .catch(() => setOracleStale(false));
+    }
   }, [account, address]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefreshOracle = async () => {
+    if (!account) return;
+    setRefreshingOracle(true);
+    setTxError(null);
+    try {
+      await refreshOracle(account);
+      setOracleStale(false);
+    } catch (err) {
+      setTxError(err instanceof Error ? err.message : 'Failed to refresh oracle');
+    } finally {
+      setRefreshingOracle(false);
+    }
+  };
 
   const handleOpenCDP = async () => {
     if (!account) return;
@@ -56,25 +138,34 @@ export default function CDPPage() {
       setTxHash(hash);
       setHasCDP(true);
     } catch (err) {
+      console.error('[CDP] open_cdp error:', err);
       setTxError(err instanceof Error ? err.message : 'Failed to open CDP');
     }
   };
 
+  /** Encode proof data: Garaga calldata for real proofs, bytesToFelts for mock */
+  const encodeProof = async (proof: Uint8Array, publicInputs: string[], circuitType: CircuitType): Promise<string[]> => {
+    if (SKIP_PROOFS) return bytesToFelts(proof);
+    const vk = await loadVK(circuitType);
+    return encodeGaragaCalldata(proof, publicInputs, vk);
+  };
+
   const handleAction = async () => {
-    if (!account || !address || !amount) return;
+    if (!account || !address) return;
+    // Close CDP doesn't need an amount; all other actions do
+    if (action !== 'close' && !amount) return;
     setTxHash(null);
     setTxError(null);
 
     try {
-      const amountBig = BigInt(Math.floor(parseFloat(amount) * 1e18));
-      const blinding = BigInt(Math.floor(Math.random() * 1e15));
+      // Contract amount at 1e18, circuit witness at 1e8 (these are independent)
+      const amountBig = amount ? BigInt(Math.floor(parseFloat(amount) * 1e18)) : BigInt(0);
       const nullifier = generateNullifier();
 
       switch (action) {
         case 'lock': {
-          // Circuit uses u64 — scale to 1e8
           const amountU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
-          const commitment = await pedersenHashNoir(amountU64, blinding);
+          const { blinding, commitment } = await findValidBlinding(amountU64);
           const witness: RangeProofWitness = {
             value: amountU64,
             blinding,
@@ -82,12 +173,13 @@ export default function CDPPage() {
             max_value: BigInt(2) ** BigInt(64) - BigInt(1),
           };
           const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.RANGE_PROOF, data: witness });
+          const proofData = await encodeProof(proof.proof, proof.publicInputs, CircuitType.RANGE_PROOF);
           const hash = await lockCollateral(account, {
             amount: amountBig,
-            commitment: toStarkFelt(commitment),
+            commitment,
             ct_c1: BigInt(0),
             ct_c2: BigInt(0),
-            proofData: bytesToFelts(proof.proof),
+            proofData,
             publicInputs: proof.publicInputs,
             nullifier,
           });
@@ -97,40 +189,54 @@ export default function CDPPage() {
           break;
         }
         case 'mint': {
-          const debtBlinding = BigInt(Math.floor(Math.random() * 1e15));
-          // Circuit uses u64 amounts — scale to 1e8
-          // On testnet: use on-chain collateral (1e18 scale, convert to 1e8)
-          // On devnet: use local tracker (already 1e8 scale)
+          // Check oracle freshness before minting — auto-refresh if stale
+          if (!IS_DEVNET) {
+            const oracle = await checkOracleFreshness(account);
+            if (!oracle.fresh) {
+              if (NETWORK === 'sepolia') {
+                await refreshOracle(account);
+                setOracleStale(false);
+              } else {
+                throw new Error(
+                  `Oracle price is stale (last updated ${new Date(oracle.oracleTimestamp * 1000).toLocaleString()}). ` +
+                  `Minting is paused until the oracle is refreshed.`
+                );
+              }
+            }
+          }
+
+          // Convert on-chain collateral (1e18) to u64-scale (1e8) for circuit
           let collateralU64: bigint;
           if (IS_DEVNET) {
             collateralU64 = localCollateral > BigInt(0) ? localCollateral : BigInt(Math.floor(parseFloat(amount) * 1e8 * 4));
           } else {
-            const onChainCollateral = balances.lockedCollateral ?? BigInt(0);
-            collateralU64 = onChainCollateral / BigInt(1e10); // 1e18 → 1e8
+            const onChainCollateral = localCollateral > BigInt(0) ? localCollateral : (balances.lockedCollateral ?? BigInt(0));
+            collateralU64 = onChainCollateral > BigInt(1e10) ? onChainCollateral / BigInt(1e10) : onChainCollateral;
             if (collateralU64 === BigInt(0)) {
               throw new Error('No collateral locked. Lock collateral first.');
             }
           }
           const debtU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
-          const [collateralCommitment, debtCommitment] = await Promise.all([
-            pedersenHashNoir(collateralU64, blinding),
-            pedersenHashNoir(debtU64, debtBlinding),
+          const [colResult, debtResult] = await Promise.all([
+            findValidBlinding(collateralU64, 200),
+            findValidBlinding(debtU64, 400),
           ]);
           const witness: CollateralRatioWitness = {
             collateral: collateralU64,
             debt: debtU64,
-            collateral_blinding: blinding,
-            debt_blinding: debtBlinding,
-            collateral_commitment: collateralCommitment,
-            debt_commitment: debtCommitment,
-            price: BigInt(50000 * 1e8), // placeholder BTC price
+            collateral_blinding: colResult.blinding,
+            debt_blinding: debtResult.blinding,
+            collateral_commitment: colResult.commitment,
+            debt_commitment: debtResult.commitment,
+            price: BigInt(50000 * 1e8),
             min_ratio_percent: BigInt(200),
           };
           const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.COLLATERAL_RATIO, data: witness });
+          const mintProofData = await encodeProof(proof.proof, proof.publicInputs, CircuitType.COLLATERAL_RATIO);
           const hash = await mintSUSD(account, {
-            newCollateralCommitment: toStarkFelt(collateralCommitment),
-            newDebtCommitment: toStarkFelt(debtCommitment),
-            proofData: bytesToFelts(proof.proof),
+            newCollateralCommitment: colResult.commitment,
+            newDebtCommitment: debtResult.commitment,
+            proofData: mintProofData,
             publicInputs: proof.publicInputs,
             nullifier,
           });
@@ -140,13 +246,11 @@ export default function CDPPage() {
           break;
         }
         case 'repay': {
-          // Circuit uses u64 amounts — scale to 1e8
           const repayU64 = BigInt(Math.floor(parseFloat(amount) * 1e8));
           let oldDebtU64: bigint;
           if (IS_DEVNET) {
             oldDebtU64 = localDebt > BigInt(0) ? localDebt : repayU64;
           } else {
-            // Debt is now commitment-only; use local tracker for amount
             oldDebtU64 = localDebt > BigInt(0) ? localDebt : repayU64;
             const debtCommit = balances.debtCommitment ?? BigInt(0);
             if (debtCommit === BigInt(0) && localDebt === BigInt(0)) {
@@ -154,29 +258,28 @@ export default function CDPPage() {
             }
           }
           const newDebtU64 = oldDebtU64 > repayU64 ? oldDebtU64 - repayU64 : BigInt(0);
-          const newBlinding = BigInt(Math.floor(Math.random() * 1e15));
-          const deltaBlinding = BigInt(Math.floor(Math.random() * 1e15));
-          const [oldDebtCommitment, newDebtCommitment, deltaCommitment] = await Promise.all([
-            pedersenHashNoir(oldDebtU64, blinding),
-            pedersenHashNoir(newDebtU64, newBlinding),
-            pedersenHashNoir(repayU64, deltaBlinding),
+          const [oldResult, newResult, deltaResult] = await Promise.all([
+            findValidBlinding(oldDebtU64, 500),
+            findValidBlinding(newDebtU64, 600),
+            findValidBlinding(repayU64, 700),
           ]);
           const witness: DebtUpdateWitness = {
             old_debt: oldDebtU64,
             new_debt: newDebtU64,
             delta: repayU64,
-            old_blinding: blinding,
-            new_blinding: newBlinding,
-            delta_blinding: deltaBlinding,
-            old_debt_commitment: oldDebtCommitment,
-            new_debt_commitment: newDebtCommitment,
-            delta_commitment: deltaCommitment,
+            old_blinding: oldResult.blinding,
+            new_blinding: newResult.blinding,
+            delta_blinding: deltaResult.blinding,
+            old_debt_commitment: oldResult.commitment,
+            new_debt_commitment: newResult.commitment,
+            delta_commitment: deltaResult.commitment,
             is_repayment: true,
           };
           const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.DEBT_UPDATE_VALIDITY, data: witness });
+          const repayProofData = await encodeProof(proof.proof, proof.publicInputs, CircuitType.DEBT_UPDATE_VALIDITY);
           const hash = await repay(account, {
-            newDebtCommitment: toStarkFelt(newDebtCommitment),
-            proofData: bytesToFelts(proof.proof),
+            newDebtCommitment: newResult.commitment,
+            proofData: repayProofData,
             publicInputs: proof.publicInputs,
             nullifier,
           });
@@ -186,15 +289,16 @@ export default function CDPPage() {
           break;
         }
         case 'close': {
-          const zeroCommitment = await pedersenHashNoir(BigInt(0), blinding);
+          const { blinding, commitment: zeroCommitment } = await findValidBlinding(BigInt(0), 300);
           const witness: ZeroDebtWitness = {
             debt: BigInt(0),
             blinding,
             debt_commitment: zeroCommitment,
           };
           const proof = SKIP_PROOFS ? MOCK_PROOF : await prove({ type: CircuitType.ZERO_DEBT, data: witness });
+          const closeProofData = await encodeProof(proof.proof, proof.publicInputs, CircuitType.ZERO_DEBT);
           const hash = await closeCDP(account, {
-            proofData: bytesToFelts(proof.proof),
+            proofData: closeProofData,
             publicInputs: proof.publicInputs,
             nullifier,
           });
@@ -208,7 +312,8 @@ export default function CDPPage() {
       setAmount('');
       await refresh();
     } catch (err) {
-      setTxError(err instanceof Error ? err.message : 'Transaction failed');
+      console.error('[CDP] Error:', err);
+      setTxError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -222,81 +327,154 @@ export default function CDPPage() {
 
   if (!address) {
     return (
-      <div className="text-center py-16">
-        <h2 className="text-2xl font-bold mb-4">Shielded CDP</h2>
-        <p className="text-gray-400">Connect your wallet to manage your CDP.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mb-6">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" className="text-shield-400" fill="none" />
+            <path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-shield-400" fill="none" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Shielded CDP</h2>
+        <p className="text-gray-500 max-w-md">Connect your wallet to open a Collateralized Debt Position and mint sUSD.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Shielded CDP</h2>
-      <p className="text-gray-400">
-        Lock sxyBTC as collateral and mint sUSD stablecoin. Minimum collateral ratio: 200%.
-      </p>
+      {/* Hero Header */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-white tracking-tight mb-1">Shielded CDP</h2>
+        <p className="text-gray-500">
+          Lock sxyBTC as collateral and mint sUSD stablecoin. Minimum collateral ratio: 200%.
+        </p>
+      </div>
 
+      {/* Balance Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <BalanceDisplay
           label="Locked Collateral"
-          amount={IS_DEVNET && localCollateral > BigInt(0) ? formatU64(localCollateral) : balances.lockedCollateral}
+          amount={localCollateral > BigInt(0) ? formatU64(localCollateral) : balances.lockedCollateral}
           symbol="sxyBTC"
         />
         <BalanceDisplay
           label="sUSD Debt"
-          amount={IS_DEVNET && localDebt > BigInt(0) ? formatU64(localDebt) : (balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? 'Active' : 'None')}
+          amount={localDebt > BigInt(0) ? formatU64(localDebt) : 'None'}
           symbol="sUSD"
         />
         <BalanceDisplay
           label="Debt Status"
-          amount={balances.debtCommitment && balances.debtCommitment !== BigInt(0) ? 'Active' : 'None'}
+          amount={localDebt > BigInt(0) ? 'Active' : 'None'}
           symbol=""
         />
       </div>
 
+      {/* CDP Status Check */}
       {hasCDP === null && (
         <button
           onClick={checkCDP}
-          className="text-sm text-shield-400 hover:text-shield-300 transition-colors"
+          className="text-sm text-shield-400 hover:text-shield-300 transition-colors flex items-center gap-2"
         >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M13.5 8a5.5 5.5 0 11-11 0 5.5 5.5 0 0111 0z" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            <path d="M8 5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          </svg>
           Check CDP Status
         </button>
       )}
 
+      {/* No CDP — Open Prompt */}
       {hasCDP === false && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
-          <p className="text-gray-400 mb-4">You don't have a CDP yet.</p>
-          <button
-            onClick={handleOpenCDP}
-            className="bg-shield-600 hover:bg-shield-500 text-white font-medium px-6 py-2 rounded transition-colors"
-          >
+        <div className="card text-center py-10">
+          <div className="w-14 h-14 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mx-auto mb-5">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" className="text-shield-400" fill="none" />
+              <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-shield-400" fill="none" />
+            </svg>
+          </div>
+          <p className="text-gray-400 mb-5">You don't have a CDP yet. Open one to start minting sUSD.</p>
+          <button onClick={handleOpenCDP} className="btn-primary">
             Open CDP
           </button>
         </div>
       )}
 
+      {/* Oracle Stale Warning */}
+      {oracleStale && (
+        <div className="alert-warning flex items-center justify-between">
+          <span>Oracle price is stale. Minting sUSD is paused until the oracle is refreshed.</span>
+          <button
+            onClick={handleRefreshOracle}
+            disabled={refreshingOracle}
+            className="btn-secondary text-xs ml-3 shrink-0"
+          >
+            {refreshingOracle ? (
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin" />
+                Refreshing...
+              </span>
+            ) : 'Refresh Oracle'}
+          </button>
+        </div>
+      )}
+
+      {/* Faucet for CDP — lock_collateral needs xyBTC in wallet, not in vault */}
       {hasCDP !== false && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <div className="flex gap-2 mb-4">
+        <div className="card flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Collateral Tokens</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Lock Collateral requires xyBTC in your wallet (not in the vault). Mint test tokens if needed.</p>
+          </div>
+          <button
+            onClick={handleFaucetCDP}
+            disabled={isMintingCDP}
+            className="btn-secondary text-sm"
+          >
+            {isMintingCDP ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 border-2 border-gray-400/30 border-t-gray-400 rounded-full animate-spin" />
+                Minting...
+              </span>
+            ) : 'Mint 100 xyBTC'}
+          </button>
+        </div>
+      )}
+      {faucetMsg && (
+        <p className="text-xs text-gray-400 break-all px-1 -mt-4">{faucetMsg}</p>
+      )}
+
+      {/* CDP Actions Panel */}
+      {hasCDP !== false && (
+        <div className="card space-y-5">
+          {/* Action Tabs */}
+          <div className="flex gap-1.5 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06]">
             {(['lock', 'mint', 'repay', 'close'] as CDPAction[]).map((a) => (
               <button
                 key={a}
                 onClick={() => setAction(a)}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex-1 justify-center ${
                   action === a
-                    ? 'bg-shield-700/20 text-shield-300'
-                    : 'text-gray-400 hover:text-gray-200'
+                    ? a === 'close'
+                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                      : 'bg-shield-600/15 text-shield-300 border border-shield-500/20'
+                    : 'text-gray-500 hover:text-gray-300 border border-transparent'
                 }`}
               >
-                {a === 'lock' ? 'Lock Collateral' :
-                 a === 'mint' ? 'Mint sUSD' :
-                 a === 'repay' ? 'Repay' : 'Close CDP'}
+                {ACTION_META[a].icon}
+                <span className="hidden sm:inline">{ACTION_META[a].label}</span>
               </button>
             ))}
           </div>
 
-          {action !== 'close' && (
-            <div className="flex gap-3 mb-4">
+          {/* Action Description */}
+          <div className="flex items-center gap-2">
+            <span className="badge-shield text-[10px]">ZK Proof Required</span>
+            <span className="text-xs text-gray-500">{ACTION_META[action].description}</span>
+          </div>
+
+          {/* Action Input */}
+          {action !== 'close' ? (
+            <div className="flex gap-3">
               <input
                 type="number"
                 value={amount}
@@ -307,41 +485,47 @@ export default function CDPPage() {
                 }
                 min="0"
                 step="0.001"
-                className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+                className="input-field flex-1 font-mono"
               />
               <button
                 onClick={handleAction}
                 disabled={!amount || isProving}
-                className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+                className="btn-primary"
               >
-                {isProving ? 'Proving...' : 'Submit'}
+                {isProving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Proving...
+                  </span>
+                ) : 'Submit'}
               </button>
             </div>
-          )}
-
-          {action === 'close' && (
+          ) : (
             <button
               onClick={handleAction}
               disabled={isProving}
-              className="bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium px-6 py-2 rounded transition-colors"
+              className="btn-danger"
             >
-              {isProving ? 'Proving...' : 'Close CDP'}
+              {isProving ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Proving...
+                </span>
+              ) : 'Close CDP'}
             </button>
           )}
 
           <ProofProgress progress={progress} error={proofError} />
 
           {txHash && (
-            <div className="mt-4 p-3 bg-green-900/20 border border-green-800/50 rounded text-sm">
-              <span className="text-green-400">Transaction submitted: </span>
-              <span className="text-gray-300 font-mono text-xs break-all">{txHash}</span>
+            <div className="tx-success">
+              <span className="text-emerald-400 font-medium">Transaction submitted </span>
+              <span className="text-gray-400 font-mono text-xs break-all">{txHash}</span>
             </div>
           )}
 
           {txError && (
-            <div className="mt-4 p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
-              {txError}
-            </div>
+            <div className="tx-error">{txError}</div>
           )}
         </div>
       )}

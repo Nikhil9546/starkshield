@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- shielded_cdp
+// Obscura v1.5 -- shielded_cdp
 //
 // Private Collateralized Debt Positions (CDPs) backed by xyBTC collateral.
 // Users lock xyBTC, mint sUSD stablecoin, repay, and close positions.
@@ -227,19 +227,11 @@ pub mod ShieldedCDP {
 
             if old_commitment == ZERO_COMMITMENT {
                 let verified = verifier
-                    .verify(
-                        ProofTypes::RANGE_PROOF,
-                        array![new_collateral_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::RANGE_PROOF, proof_data);
                 assert(verified, 'range proof failed');
             } else {
                 let verified = verifier
-                    .verify(
-                        ProofTypes::DEBT_UPDATE_VALIDITY,
-                        array![old_commitment, new_collateral_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::DEBT_UPDATE_VALIDITY, proof_data);
                 assert(verified, 'update proof failed');
             }
 
@@ -307,20 +299,12 @@ pub mod ShieldedCDP {
             if debt_commitment != ZERO_COMMITMENT {
                 // Has debt: must prove the remaining collateral still covers the debt
                 let verified = verifier
-                    .verify(
-                        ProofTypes::COLLATERAL_RATIO,
-                        array![new_collateral_commitment, debt_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::COLLATERAL_RATIO, proof_data);
                 assert(verified, 'collateral ratio proof failed');
             } else {
                 // No debt: just prove collateral update is valid
                 let verified = verifier
-                    .verify(
-                        ProofTypes::BALANCE_SUFFICIENCY,
-                        array![old_commitment, new_collateral_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::BALANCE_SUFFICIENCY, proof_data);
                 assert(verified, 'balance proof failed');
             }
 
@@ -382,11 +366,7 @@ pub mod ShieldedCDP {
                 contract_address: self.proof_verifier.read(),
             };
             let verified = verifier
-                .verify(
-                    ProofTypes::COLLATERAL_RATIO,
-                    array![collateral_commitment, new_debt_commitment].span(),
-                    proof_data,
-                );
+                .verify(ProofTypes::COLLATERAL_RATIO, proof_data);
             assert(verified, 'collateral ratio proof failed');
 
             // State mutation (after proof verification)
@@ -430,11 +410,7 @@ pub mod ShieldedCDP {
                 contract_address: self.proof_verifier.read(),
             };
             let verified = verifier
-                .verify(
-                    ProofTypes::DEBT_UPDATE_VALIDITY,
-                    array![old_debt_commitment, new_debt_commitment].span(),
-                    proof_data,
-                );
+                .verify(ProofTypes::DEBT_UPDATE_VALIDITY, proof_data);
             assert(verified, 'debt update proof failed');
 
             // State mutation (after proof verification)
@@ -476,11 +452,7 @@ pub mod ShieldedCDP {
                     contract_address: self.proof_verifier.read(),
                 };
                 let verified = verifier
-                    .verify(
-                        ProofTypes::ZERO_DEBT,
-                        array![debt_commitment].span(),
-                        proof_data,
-                    );
+                    .verify(ProofTypes::ZERO_DEBT, proof_data);
                 assert(verified, 'zero debt proof failed');
             }
 
@@ -554,11 +526,7 @@ pub mod ShieldedCDP {
                 contract_address: self.proof_verifier.read(),
             };
             let verified = verifier
-                .verify(
-                    ProofTypes::COLLATERAL_RATIO,
-                    array![collateral_commitment, debt_commitment].span(),
-                    proof_data,
-                );
+                .verify(ProofTypes::COLLATERAL_RATIO, proof_data);
             assert(verified, 'collateral ratio proof failed');
 
             // Cancel liquidation

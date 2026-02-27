@@ -1,4 +1,4 @@
-// StarkShield v1.5 -- Adversarial tests
+// Obscura v1.5 -- Adversarial tests
 //
 // Tests: replay attacks, invalid proofs, malformed data, paused state attacks.
 
@@ -8,9 +8,9 @@ use snforge_std::{
     declare, DeclareResultTrait, ContractClassTrait, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starkshield::interfaces::{IShieldedVaultDispatcher, IShieldedVaultDispatcherTrait};
-use starkshield::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
-use starkshield::mocks::mock_verifier::{IMockProofVerifierDispatcher, IMockProofVerifierDispatcherTrait};
+use obscura::interfaces::{IShieldedVaultDispatcher, IShieldedVaultDispatcherTrait};
+use obscura::mocks::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
+use obscura::mocks::mock_verifier::{IMockProofVerifierDispatcher, IMockProofVerifierDispatcherTrait};
 
 // =============================================================================
 // Test helpers (duplicated from test_vault for independence)

@@ -8,31 +8,48 @@ import ProofsPage from './pages/ProofsPage';
 import SettingsPage from './pages/SettingsPage';
 
 const navItems = [
-  { to: '/stake', label: 'Stake' },
-  { to: '/cdp', label: 'CDP' },
-  { to: '/withdraw', label: 'Withdraw' },
-  { to: '/proofs', label: 'Proofs' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/stake', label: 'Stake', icon: '~' },
+  { to: '/cdp', label: 'CDP', icon: '#' },
+  { to: '/withdraw', label: 'Withdraw', icon: '<' },
+  { to: '/proofs', label: 'Proofs', icon: '*' },
+  { to: '/settings', label: 'Settings', icon: '%' },
 ];
 
 export default function App() {
   return (
     <WalletProvider>
-      <div className="min-h-screen flex flex-col">
-        <header className="border-b border-gray-800 px-6 py-4">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <h1 className="text-xl font-bold text-shield-400">StarkShield</h1>
-              <nav className="flex gap-1">
+      <div className="relative min-h-screen flex flex-col z-10">
+        {/* Top ambient glow */}
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-glow-shield pointer-events-none z-0" />
+
+        <header className="relative z-20 border-b border-white/[0.06] backdrop-blur-xl bg-[#050a18]/80">
+          <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-10">
+              {/* Logo */}
+              <NavLink to="/stake" className="flex items-center gap-2.5 group">
+                <div className="w-8 h-8 rounded-lg bg-shield-600 flex items-center justify-center shadow-glow-sm group-hover:shadow-glow-md transition-shadow duration-300">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="white" strokeWidth="1.5" fill="none" />
+                    <path d="M8 5L11 6.75V10.25L8 12L5 10.25V6.75L8 5Z" fill="white" fillOpacity="0.9" />
+                  </svg>
+                </div>
+                <span className="text-lg font-bold tracking-tight">
+                  <span className="text-white">Obs</span>
+                  <span className="text-shield-400">cura</span>
+                </span>
+              </NavLink>
+
+              {/* Navigation */}
+              <nav className="flex items-center gap-1">
                 {navItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) =>
-                      `px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                      `px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                         isActive
-                          ? 'bg-shield-700/20 text-shield-300'
-                          : 'text-gray-400 hover:text-gray-200'
+                          ? 'bg-shield-600/15 text-shield-300 shadow-inner'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]'
                       }`
                     }
                   >
@@ -45,7 +62,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-8">
+        <main className="relative z-10 flex-1 max-w-7xl mx-auto w-full px-6 py-8">
           <Routes>
             <Route path="/stake" element={<StakePage />} />
             <Route path="/cdp" element={<CDPPage />} />
@@ -56,8 +73,16 @@ export default function App() {
           </Routes>
         </main>
 
-        <footer className="border-t border-gray-800 px-6 py-4 text-center text-xs text-gray-500">
-          StarkShield v1.5 — Privacy-Preserving BTC DeFi on Starknet
+        <footer className="relative z-10 border-t border-white/[0.04] px-6 py-5">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <span className="text-xs text-gray-500">
+              Obscura v1.5 -- Privacy-Preserving BTC DeFi on Starknet
+            </span>
+            <div className="flex items-center gap-4">
+              <span className="badge-shield text-[10px]">Sepolia Testnet</span>
+              <span className="text-xs text-gray-600">Powered by Noir + Garaga</span>
+            </div>
+          </div>
         </footer>
       </div>
     </WalletProvider>

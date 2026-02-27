@@ -1,5 +1,5 @@
 /**
- * StarkShield v1.5 — Seed Fixtures
+ * Obscura v1.5 — Seed Fixtures
  *
  * Seeds deployed contracts with sample data for testing and demos.
  * Creates sample deposits, CDPs, and solvency proofs.
@@ -73,7 +73,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('=== StarkShield v1.5 — Seed Fixtures ===\n');
+  console.log('=== Obscura v1.5 — Seed Fixtures ===\n');
   console.log(`Network: Sepolia`);
   console.log(`Deployer: ${accountAddr}\n`);
 

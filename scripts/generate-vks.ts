@@ -1,5 +1,5 @@
 /**
- * StarkShield v1.5 — Generate Verification Keys
+ * Obscura v1.5 — Generate Verification Keys
  *
  * Compiles Noir circuits, generates verifying keys with Barretenberg,
  * and optionally generates Garaga Cairo verifier contracts.
@@ -42,7 +42,7 @@ function run(cmd: string, cwd: string): string {
 }
 
 async function main() {
-  console.log('=== StarkShield v1.5 — Verification Key Generation ===\n');
+  console.log('=== Obscura v1.5 — Verification Key Generation ===\n');
 
   // Check tools
   try {

@@ -82,7 +82,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `starkshield-key-${address.slice(0, 8)}.json`;
+    a.download = `obscura-key-${address.slice(0, 8)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setStatus('Backup exported.');
@@ -123,44 +123,69 @@ export default function SettingsPage() {
 
   if (!address) {
     return (
-      <div className="text-center py-16">
-        <h2 className="text-2xl font-bold mb-4">Settings</h2>
-        <p className="text-gray-400">Connect your wallet to manage settings.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mb-6">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2a4 4 0 00-4 4v2H3a1 1 0 00-1 1v5a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4z" stroke="currentColor" strokeWidth="1.2" className="text-shield-400" fill="none" />
+            <circle cx="8" cy="11" r="1.5" fill="currentColor" className="text-shield-400" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Settings</h2>
+        <p className="text-gray-500 max-w-md">Connect your wallet to manage encryption keys and privacy settings.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Settings</h2>
-      <p className="text-gray-400">
-        Manage your ElGamal encryption keys for shielded balances.
-      </p>
+      {/* Hero Header */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-white tracking-tight mb-1">Settings</h2>
+        <p className="text-gray-500">
+          Manage your ElGamal encryption keys for shielded balances.
+        </p>
+      </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 space-y-4">
-        <h3 className="text-lg font-semibold">Encryption Key</h3>
+      {/* Encryption Key Card */}
+      <div className="card space-y-5">
+        <div className="flex items-center gap-3">
+          <h3 className="section-title">Encryption Key</h3>
+          {hasKey === true && (
+            <span className="badge-green">
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8l4 4 6-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </svg>
+              stored
+            </span>
+          )}
+          {hasKey === false && (
+            <span className="badge-yellow">no key</span>
+          )}
+        </div>
 
+        {/* Key Status */}
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">Status:</span>
           {hasKey === null ? (
             <button
               onClick={checkKey}
-              className="text-sm text-shield-400 hover:text-shield-300"
+              className="text-sm text-shield-400 hover:text-shield-300 transition-colors"
             >
               Check
             </button>
           ) : hasKey ? (
-            <span className="text-sm text-green-400">Key stored</span>
+            <span className="text-sm text-emerald-400 font-medium">Key stored</span>
           ) : (
-            <span className="text-sm text-yellow-400">No key found</span>
+            <span className="text-sm text-yellow-400 font-medium">No key found</span>
           )}
           {publicKeyDisplay && (
-            <span className="text-xs text-gray-500 font-mono">{publicKeyDisplay}</span>
+            <span className="text-xs text-gray-600 font-mono bg-white/[0.03] px-2 py-0.5 rounded">{publicKeyDisplay}</span>
           )}
         </div>
 
+        {/* Password Input */}
         <div>
-          <label className="text-sm text-gray-400 block mb-1">
+          <label className="text-xs text-gray-500 uppercase tracking-wider font-medium block mb-2">
             Password (encrypts your key in browser storage)
           </label>
           <input
@@ -168,17 +193,22 @@ export default function SettingsPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter password (min 8 chars)"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-shield-500"
+            className="input-field w-full"
           />
         </div>
 
+        {/* Action Buttons */}
         <div className="flex flex-wrap gap-2">
           {!hasKey && (
             <button
               onClick={handleGenerate}
               disabled={!password}
-              className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
+              className="btn-primary text-sm"
             >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+              </svg>
               Generate New Key
             </button>
           )}
@@ -186,50 +216,53 @@ export default function SettingsPage() {
             <button
               onClick={handleLoad}
               disabled={!password}
-              className="bg-shield-600 hover:bg-shield-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
+              className="btn-primary text-sm"
             >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="6" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                <path d="M5 6V4a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              </svg>
               Unlock Key
             </button>
           )}
           {hasKey && (
-            <button
-              onClick={handleExport}
-              className="bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium px-4 py-2 rounded transition-colors"
-            >
+            <button onClick={handleExport} className="btn-secondary text-sm">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2v8M8 10l-3-3M8 10l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <path d="M3 14h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+              </svg>
               Export Backup
             </button>
           )}
-          <button
-            onClick={handleImport}
-            className="bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium px-4 py-2 rounded transition-colors"
-          >
+          <button onClick={handleImport} className="btn-secondary text-sm">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M8 10V2M8 2l-3 3M8 2l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <path d="M3 14h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+            </svg>
             Import Backup
           </button>
           {hasKey && (
-            <button
-              onClick={handleDelete}
-              className="bg-red-900/50 hover:bg-red-800/50 text-red-400 text-sm font-medium px-4 py-2 rounded transition-colors"
-            >
+            <button onClick={handleDelete} className="btn-danger text-sm">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+              </svg>
               Delete Key
             </button>
           )}
         </div>
 
         {status && (
-          <div className="p-3 bg-green-900/20 border border-green-800/50 rounded text-sm text-green-400">
-            {status}
-          </div>
+          <div className="tx-success">{status}</div>
         )}
         {error && (
-          <div className="p-3 bg-red-900/20 border border-red-800/50 rounded text-sm text-red-400">
-            {error}
-          </div>
+          <div className="tx-error">{error}</div>
         )}
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-2">About Privacy Keys</h3>
-        <div className="space-y-2 text-sm text-gray-400">
+      {/* About Privacy Keys */}
+      <div className="card space-y-3">
+        <h3 className="section-title">About Privacy Keys</h3>
+        <div className="space-y-2 text-sm text-gray-400 leading-relaxed">
           <p>
             Your ElGamal encryption key is used to encrypt and decrypt your shielded balances.
             Only you can see your actual balance — on-chain, it appears as an encrypted ciphertext.
@@ -238,9 +271,9 @@ export default function SettingsPage() {
             The key is encrypted with your password using AES-256-GCM (PBKDF2 with 100,000 iterations)
             before being stored in your browser.
           </p>
-          <p className="text-yellow-400/80">
-            Always keep a backup of your key. If you lose it, your shielded funds cannot be recovered.
-          </p>
+        </div>
+        <div className="alert-warning">
+          Always keep a backup of your key. If you lose it, your shielded funds cannot be recovered.
         </div>
       </div>
     </div>
