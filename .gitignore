@@ -25,11 +25,8 @@ Thumbs.db
 references/
 
 # AI local assistant context
-CLAUDE.md
-AGENTS.md
 .claude/
 
-# Extra documentation / context files
-FRONTEND_DEVELOPER_CONTEXT.md
-TESTNET_GUIDE.md
-*.local.md
+# Markdown files (block all except README.md)
+*.md
+!README.md
