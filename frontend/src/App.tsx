@@ -2,6 +2,7 @@ import { Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { WalletProvider } from './hooks/useWallet';
 import WalletConnect from './components/WalletConnect';
 import LandingPage from './pages/LandingPage';
+import DocsPage from './pages/DocsPage';
 import StakePage from './pages/StakePage';
 import CDPPage from './pages/CDPPage';
 import WithdrawPage from './pages/WithdrawPage';
@@ -90,9 +91,14 @@ function AppLayout() {
 export default function App() {
   const location = useLocation();
   const isLandingPage = location.pathname === '/';
+  const isDocsPage = location.pathname === '/docs';
 
   if (isLandingPage) {
     return <LandingPage />;
+  }
+
+  if (isDocsPage) {
+    return <DocsPage />;
   }
 
   return (

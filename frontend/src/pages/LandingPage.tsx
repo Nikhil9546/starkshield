@@ -3,7 +3,9 @@ import {
   Shield, ShieldCheck, ShieldAlert, Lock, Unlock, Eye, Zap, Target,
   Link2, TrendingUp, Database, Cpu, Layers, Fingerprint, ScanLine,
   Activity, ArrowRight, Binary, FileCode,
-  ChevronDown, Hexagon, CircuitBoard, Waypoints,
+  ChevronDown, ChevronUp, Hexagon, CircuitBoard, Waypoints,
+  Bot, Wallet, BarChart3, Settings, Terminal, Radio,
+  RefreshCw, Send, Sparkles, Search, X, Gauge, AlertTriangle, Play,
   LucideIcon
 } from "lucide-react";
 
@@ -209,6 +211,412 @@ const ShieldLogo = ({ size = 40, glow = false }: { size?: number; glow?: boolean
   </div>
 );
 
+// ─── AGENT ARENA FLOATING DOCK ───
+const AgentDock = () => {
+  const [hoveredIdx, setHoveredIdx] = useState(-1);
+  const [expandedPanel, setExpandedPanel] = useState<string | null>(null);
+  const [agentStatus, setAgentStatus] = useState("idle");
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const states = ["idle", "scanning", "active", "idle", "idle"];
+      setAgentStatus(states[Math.floor(Math.random() * states.length)]);
+    }, 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const dockItems = [
+    { icon: Bot, label: "Agent", color: "#3b82f6", panel: "agent", badge: agentStatus === "active" ? "LIVE" : null },
+    { icon: Shield, label: "Vault", color: "#8b5cf6", panel: "vault" },
+    { icon: Wallet, label: "Wallet", color: "#06b6d4", panel: "wallet" },
+    { icon: BarChart3, label: "Analytics", color: "#10b981", panel: "analytics" },
+    { icon: Terminal, label: "Console", color: "#f59e0b", panel: "console" },
+    { icon: Settings, label: "Config", color: "#6b7280", panel: "settings" },
+  ];
+
+  const getScale = (idx: number) => {
+    if (hoveredIdx === -1) return 1;
+    const diff = Math.abs(idx - hoveredIdx);
+    if (diff === 0) return 1.45;
+    if (diff === 1) return 1.2;
+    if (diff === 2) return 1.05;
+    return 1;
+  };
+
+  const getTranslateY = (idx: number) => {
+    if (hoveredIdx === -1) return 0;
+    const diff = Math.abs(idx - hoveredIdx);
+    if (diff === 0) return -18;
+    if (diff === 1) return -8;
+    if (diff === 2) return -3;
+    return 0;
+  };
+
+  return (
+    <>
+      {/* Expanded Panel */}
+      {expandedPanel && (
+        <div className="dock-panel-overlay" onClick={() => setExpandedPanel(null)}>
+          <div className="dock-panel" onClick={e => e.stopPropagation()}>
+            <DockPanel type={expandedPanel} onClose={() => setExpandedPanel(null)} agentStatus={agentStatus} />
+          </div>
+        </div>
+      )}
+
+      {/* The Dock */}
+      <div className="agent-dock-container">
+        {/* Status indicator line */}
+        <div className="dock-status-line" style={{
+          background: agentStatus === "active" ? "#10b981" :
+            agentStatus === "scanning" ? "#f59e0b" :
+            agentStatus === "alert" ? "#ef4444" : "#3b82f6"
+        }} />
+
+        <div className="agent-dock">
+          {dockItems.map((item, idx) => {
+            const scale = getScale(idx);
+            const translateY = getTranslateY(idx);
+            const isHovered = hoveredIdx === idx;
+            const isActive = expandedPanel === item.panel;
+
+            return (
+              <div
+                key={idx}
+                className={`dock-item ${isActive ? "dock-item-active" : ""}`}
+                onMouseEnter={() => setHoveredIdx(idx)}
+                onMouseLeave={() => setHoveredIdx(-1)}
+                onClick={() => setExpandedPanel(expandedPanel === item.panel ? null : item.panel)}
+                style={{
+                  transform: `scale(${scale}) translateY(${translateY}px)`,
+                  transition: "all 0.25s cubic-bezier(0.32, 0.72, 0, 1)",
+                  zIndex: isHovered ? 10 : 1,
+                }}
+              >
+                {/* Glow ring */}
+                <div className="dock-item-glow" style={{
+                  background: isHovered || isActive ? `radial-gradient(circle, ${item.color}25 0%, transparent 70%)` : "transparent",
+                  boxShadow: isActive ? `0 0 20px ${item.color}30` : "none",
+                }} />
+
+                {/* Icon bg */}
+                <div className="dock-item-icon" style={{
+                  background: isActive ? `${item.color}20` : `rgba(255,255,255,0.04)`,
+                  borderColor: isHovered || isActive ? `${item.color}50` : "rgba(255,255,255,0.06)",
+                  boxShadow: isHovered ? `0 4px 20px ${item.color}20, inset 0 0 20px ${item.color}08` : "none",
+                }}>
+                  <item.icon size={18} color={isActive ? item.color : isHovered ? item.color : "rgba(255,255,255,0.5)"} strokeWidth={1.5} />
+
+                  {/* Badge */}
+                  {item.badge && (
+                    <div className="dock-badge">
+                      <span className="dock-badge-dot" />
+                      {item.badge}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tooltip */}
+                <div className="dock-tooltip" style={{
+                  opacity: isHovered ? 1 : 0,
+                  transform: isHovered ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(4px)",
+                  background: `${item.color}18`,
+                  borderColor: `${item.color}30`,
+                }}>
+                  <span style={{ color: item.color }}>{item.label}</span>
+                </div>
+
+                {/* Active indicator dot */}
+                {isActive && (
+                  <div className="dock-active-dot" style={{ background: item.color, boxShadow: `0 0 8px ${item.color}` }} />
+                )}
+              </div>
+            );
+          })}
+
+          {/* Separator */}
+          <div className="dock-separator" />
+
+          {/* Power / Status button */}
+          <div
+            className="dock-item"
+            onMouseEnter={() => setHoveredIdx(99)}
+            onMouseLeave={() => setHoveredIdx(-1)}
+            style={{
+              transform: `scale(${hoveredIdx === 99 ? 1.3 : 1}) translateY(${hoveredIdx === 99 ? -12 : 0}px)`,
+              transition: "all 0.25s cubic-bezier(0.32, 0.72, 0, 1)",
+            }}
+          >
+            <div className="dock-item-icon dock-power-btn" style={{
+              borderColor: agentStatus === "active" ? "#10b98140" :
+                agentStatus === "scanning" ? "#f59e0b40" : "rgba(255,255,255,0.06)",
+            }}>
+              <Radio size={16} color={
+                agentStatus === "active" ? "#10b981" :
+                agentStatus === "scanning" ? "#f59e0b" :
+                agentStatus === "alert" ? "#ef4444" : "rgba(255,255,255,0.35)"
+              } strokeWidth={1.5} className={agentStatus === "scanning" ? "spin-slow" : ""} />
+            </div>
+            <div className="dock-tooltip" style={{
+              opacity: hoveredIdx === 99 ? 1 : 0,
+              transform: hoveredIdx === 99 ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(4px)",
+            }}>
+              <span style={{ color: agentStatus === "active" ? "#10b981" : "#6b7280", fontSize: 9 }}>
+                {agentStatus.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// ─── DOCK PANEL CONTENT ───
+const DockPanel = ({ type, onClose, agentStatus }: { type: string; onClose: () => void; agentStatus: string }) => {
+  const panels: Record<string, { title: string; icon: LucideIcon; color: string; content: React.ReactNode }> = {
+    agent: {
+      title: "SHIELD AGENT",
+      icon: Bot,
+      color: "#3b82f6",
+      content: (
+        <div className="panel-content">
+          <div className="panel-status-row">
+            <div className="panel-status-indicator" style={{ background: agentStatus === "active" ? "#10b981" : "#3b82f6" }} />
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: "'Fira Code'" }}>
+              Agent Status: {agentStatus.toUpperCase()}
+            </span>
+          </div>
+          <div className="panel-agent-actions">
+            {[
+              { label: "Scan Mempool", icon: Search, desc: "Monitor for MEV threats" },
+              { label: "Shield Balance", icon: Shield, desc: "Encrypt visible positions" },
+              { label: "Auto-Compound", icon: RefreshCw, desc: "Reinvest yield privately" },
+              { label: "Risk Assessment", icon: AlertTriangle, desc: "Evaluate collateral health" },
+            ].map((action, i) => (
+              <button key={i} className="panel-action-btn">
+                <action.icon size={14} strokeWidth={1.5} />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{action.label}</div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)" }}>{action.desc}</div>
+                </div>
+                <Play size={10} color="rgba(255,255,255,0.2)" style={{ marginLeft: "auto" }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    vault: {
+      title: "SHIELDED VAULT",
+      icon: Shield,
+      color: "#8b5cf6",
+      content: (
+        <div className="panel-content">
+          <div className="panel-vault-stats">
+            <div className="panel-stat-card">
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>SHIELDED BTC</div>
+              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#8b5cf6" }}>▓▓▓.▓▓</div>
+              <div style={{ fontSize: 8, color: "rgba(139,92,246,0.5)" }}>ENCRYPTED</div>
+            </div>
+            <div className="panel-stat-card">
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>YIELD (APY)</div>
+              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#10b981" }}>▓.▓▓%</div>
+              <div style={{ fontSize: 8, color: "rgba(16,185,129,0.5)" }}>PRIVATE</div>
+            </div>
+          </div>
+          <div className="panel-vault-actions">
+            <button className="arena-btn arena-btn-primary" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties}>
+              <Lock size={12} /> DEPOSIT & SHIELD
+            </button>
+            <button className="arena-btn arena-btn-outline" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties}>
+              <Unlock size={12} /> UNSHIELD
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    wallet: {
+      title: "CONNECTED WALLET",
+      icon: Wallet,
+      color: "#06b6d4",
+      content: (
+        <div className="panel-content">
+          <div className="panel-wallet-addr">
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", marginBottom: 6 }}>ADDRESS</div>
+            <div className="panel-addr-box">
+              <code>0x7a3f...8b2e</code>
+              <button className="panel-copy-btn">COPY</button>
+            </div>
+          </div>
+          <div className="panel-wallet-tokens">
+            {[
+              { name: "xyBTC", amount: "—.——", status: "Public" },
+              { name: "sxyBTC", amount: "▓▓.▓▓", status: "Shielded" },
+              { name: "sUSD", amount: "▓▓▓.▓▓", status: "Shielded" },
+            ].map((tok, i) => (
+              <div key={i} className="panel-token-row">
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div className="panel-token-dot" style={{ background: tok.status === "Shielded" ? "#8b5cf6" : "#06b6d4" }} />
+                  <span style={{ fontSize: 11, fontFamily: "'Orbitron'", fontWeight: 600, color: "#fff" }}>{tok.name}</span>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 12, fontFamily: "'Fira Code'", color: "#fff" }}>{tok.amount}</div>
+                  <div style={{ fontSize: 8, color: tok.status === "Shielded" ? "#8b5cf6" : "rgba(255,255,255,0.3)" }}>{tok.status}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    analytics: {
+      title: "PRIVACY ANALYTICS",
+      icon: BarChart3,
+      color: "#10b981",
+      content: (
+        <div className="panel-content">
+          <div className="panel-analytics-grid">
+            {[
+              { label: "Privacy Score", value: "94", unit: "/100", color: "#10b981" },
+              { label: "Shield Rate", value: "87", unit: "%", color: "#8b5cf6" },
+              { label: "MEV Blocked", value: "23", unit: "txns", color: "#ef4444" },
+              { label: "Gas Saved", value: "0.12", unit: "ETH", color: "#f59e0b" },
+            ].map((stat, i) => (
+              <div key={i} className="panel-analytics-card">
+                <div style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1.5, marginBottom: 4 }}>{stat.label.toUpperCase()}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+                  <span style={{ fontSize: 20, fontFamily: "'Orbitron'", fontWeight: 900, color: stat.color }}>{stat.value}</span>
+                  <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{stat.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    console: {
+      title: "ZK CONSOLE",
+      icon: Terminal,
+      color: "#f59e0b",
+      content: (
+        <div className="panel-content">
+          <div className="panel-console">
+            {[
+              { time: "12:04:22", msg: "Range proof compiled — 2.4s", type: "success" },
+              { time: "12:04:18", msg: "ElGamal ciphertext generated", type: "info" },
+              { time: "12:04:15", msg: "Garaga verifier: PASS", type: "success" },
+              { time: "12:04:12", msg: "Collateral ratio proof: ≥ 200%", type: "info" },
+              { time: "12:04:08", msg: "Noir circuit: balance_sufficiency", type: "info" },
+              { time: "12:04:01", msg: "Solvency domain check: VALID", type: "success" },
+            ].map((log, i) => (
+              <div key={i} className="console-line" style={{ animationDelay: `${i * 0.08}s` }}>
+                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 9, fontFamily: "'Fira Code'" }}>{log.time}</span>
+                <span style={{ color: log.type === "success" ? "#10b981" : "#f59e0b", fontSize: 10, fontFamily: "'Fira Code'" }}>{log.msg}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    settings: {
+      title: "CONFIGURATION",
+      icon: Settings,
+      color: "#6b7280",
+      content: (
+        <div className="panel-content">
+          <div className="panel-settings-list">
+            {[
+              { label: "Auto-Shield Deposits", enabled: true },
+              { label: "MEV Protection", enabled: true },
+              { label: "Private Yield Compound", enabled: false },
+              { label: "Proof Caching", enabled: true },
+            ].map((setting, i) => (
+              <div key={i} className="panel-setting-row">
+                <span style={{ fontSize: 11, color: "#fff" }}>{setting.label}</span>
+                <div className={`panel-toggle ${setting.enabled ? "panel-toggle-on" : ""}`}>
+                  <div className="panel-toggle-knob" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+  };
+
+  const panel = panels[type];
+  if (!panel) return null;
+
+  return (
+    <div className="dock-panel-inner">
+      <div className="dock-panel-header">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <panel.icon size={14} color={panel.color} strokeWidth={2} />
+          <span style={{ fontFamily: "'Orbitron'", fontSize: 10, fontWeight: 700, color: panel.color, letterSpacing: 2 }}>{panel.title}</span>
+        </div>
+        <button className="dock-panel-close" onClick={onClose}>
+          <X size={14} color="rgba(255,255,255,0.4)" />
+        </button>
+      </div>
+      {panel.content}
+    </div>
+  );
+};
+
+// ─── AGENT ARENA ACTION BUTTONS (floating quick actions) ───
+const AgentArenaButtons = () => {
+  const [expanded, setExpanded] = useState(false);
+
+  const actions = [
+    { icon: Shield, label: "Quick Shield", color: "#3b82f6", hotkey: "⌘S" },
+    { icon: Zap, label: "Flash Mint", color: "#8b5cf6", hotkey: "⌘M" },
+    { icon: Send, label: "Private Send", color: "#06b6d4", hotkey: "⌘P" },
+    { icon: RefreshCw, label: "Compound", color: "#10b981", hotkey: "⌘C" },
+    { icon: Gauge, label: "Health Check", color: "#f59e0b", hotkey: "⌘H" },
+  ];
+
+  return (
+    <div className="arena-buttons-container">
+      {/* Expanded actions */}
+      <div className={`arena-actions ${expanded ? "arena-actions-visible" : ""}`}>
+        {actions.map((action, i) => (
+          <button
+            key={i}
+            className="arena-action-chip"
+            style={{
+              "--chip-color": action.color,
+              transitionDelay: expanded ? `${i * 60}ms` : `${(actions.length - i) * 30}ms`,
+              opacity: expanded ? 1 : 0,
+              transform: expanded ? "translateX(0) scale(1)" : "translateX(20px) scale(0.8)",
+            } as React.CSSProperties}
+          >
+            <action.icon size={13} strokeWidth={1.8} color={action.color} />
+            <span className="arena-chip-label">{action.label}</span>
+            <span className="arena-chip-hotkey">{action.hotkey}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Toggle button */}
+      <button
+        className={`arena-toggle-btn ${expanded ? "arena-toggle-open" : ""}`}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <Sparkles size={18} strokeWidth={1.8} color="#3b82f6" className={expanded ? "" : "sparkle-pulse"} />
+        <span className="arena-toggle-label">ACTIONS</span>
+        <ChevronUp
+          size={12}
+          color="rgba(255,255,255,0.3)"
+          style={{
+            transform: expanded ? "rotate(180deg)" : "rotate(90deg)",
+            transition: "transform 0.3s",
+          }}
+        />
+      </button>
+    </div>
+  );
+};
+
 // ─── SECTIONS DATA ───
 const problemCards = [
   { icon: Eye, label: "Transparent Balances", desc: "DeFi positions are fully visible — MEV bots, competitors, and adversaries watch every move you make." },
@@ -319,18 +727,19 @@ export default function LandingPage() {
 
         /* ── ICON CARD ── */
         .icon-card{
-          position:relative;border-radius:16px;padding:28px;
-          background:linear-gradient(145deg,rgba(59,130,246,.03),rgba(15,23,42,.6));
+          position:relative;padding:28px;
+          background:linear-gradient(145deg,rgba(59,130,246,.02),rgba(15,23,42,.6));
           border:1px solid rgba(59,130,246,.08);
           overflow:hidden;cursor:default;
           transform:translateY(60px) scale(.92);opacity:0;
           transition:all .7s cubic-bezier(.16,1,.3,1);
           backdrop-filter:blur(4px);
+          clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
         }
         .icon-card.ic-visible{transform:translateY(0) scale(1);opacity:1}
         .icon-card.ic-hover{
-          border-color:rgba(59,130,246,.25);
-          box-shadow:0 8px 50px rgba(59,130,246,.08),0 0 0 1px rgba(59,130,246,.1);
+          border-color:rgba(59,130,246,.2);
+          box-shadow:0 8px 50px rgba(59,130,246,.06),0 0 0 1px rgba(59,130,246,.08);
           transform:translateY(-4px) scale(1.02);
         }
 
@@ -392,7 +801,9 @@ export default function LandingPage() {
         .ic-hover .corner{border-color:var(--card-color) !important}
 
         /* Tag */
-        .tag-flash{position:relative;overflow:hidden}
+        .tag-flash{position:relative;overflow:hidden;
+          clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+        }
         .tag-flash::after{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);animation:tShine 4s ease-in-out infinite}
         @keyframes tShine{0%{left:-100%}40%,100%{left:100%}}
 
@@ -410,12 +821,13 @@ export default function LandingPage() {
 
         /* Step card */
         .step-card{
-          position:relative;border-radius:14px;padding:24px 24px 24px 28px;
+          position:relative;padding:24px 24px 24px 28px;
           background:linear-gradient(135deg,rgba(6,182,212,.03),rgba(15,23,42,.5));
           border:1px solid rgba(6,182,212,.08);
           transform:translateX(-30px);opacity:0;
           transition:all .7s cubic-bezier(.16,1,.3,1);
           overflow:hidden;
+          clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
         }
         .step-card.sc-vis{transform:translateX(0);opacity:1}
         .step-card:hover{
@@ -432,31 +844,433 @@ export default function LandingPage() {
 
         /* Tech pill */
         .tech-pill{
-          padding:14px 20px;border-radius:10px;
-          background:rgba(59,130,246,.04);border:1px solid rgba(59,130,246,.1);
+          padding:14px 20px;
+          background:rgba(59,130,246,.03);border:1px solid rgba(59,130,246,.1);
           transition:all .35s;display:flex;align-items:center;gap:12px;cursor:default;
+          position:relative;overflow:hidden;
+          clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+        }
+        .tech-pill::before{
+          content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(59,130,246,.04),transparent);
+          animation:nwScan 6s ease-in-out infinite;pointer-events:none;
         }
         .tech-pill:hover{
-          background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.25);
-          box-shadow:0 0 25px rgba(59,130,246,.08);transform:translateY(-2px);
+          background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.25);
+          box-shadow:0 0 20px rgba(59,130,246,.06);transform:translateY(-2px);
         }
 
-        /* CTA */
+        /* Scan animation */
+        @keyframes nwScan{
+          0%{left:-100%;opacity:0}
+          10%{opacity:1}
+          90%{opacity:1}
+          100%{left:100%;opacity:0}
+        }
+        @keyframes nwGlow{
+          0%,100%{box-shadow:0 0 8px rgba(59,130,246,.15),0 0 20px rgba(59,130,246,.05),inset 0 0 8px rgba(59,130,246,.05)}
+          50%{box-shadow:0 0 14px rgba(59,130,246,.25),0 0 35px rgba(59,130,246,.1),inset 0 0 14px rgba(59,130,246,.08)}
+        }
+
+        /* CTA PRIMARY */
         .cta-btn{
-          padding:16px 42px;border-radius:10px;border:none;cursor:pointer;
-          font-family:'Orbitron',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;color:#04060b;
-          background:linear-gradient(135deg,#3b82f6,#60a5fa,#3b82f6);background-size:200% 200%;
-          animation:gShift 3s ease infinite;
-          box-shadow:0 0 30px rgba(59,130,246,.3),0 0 60px rgba(59,130,246,.08);transition:all .3s;
+          position:relative;overflow:hidden;
+          padding:16px 44px;border:none;cursor:pointer;
+          font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;letter-spacing:3px;
+          color:#04060b;text-transform:uppercase;
+          background:linear-gradient(135deg,#3b82f6,#3b82f6,#3b82f6);background-size:200% 200%;
+          clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+          transition:all .3s cubic-bezier(.16,1,.3,1);
+          animation:nwGlow 3s ease-in-out infinite;
+          text-shadow:0 0 4px rgba(59,130,246,.3);
+          text-decoration:none;
         }
-        .cta-btn:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 0 50px rgba(59,130,246,.45),0 0 100px rgba(59,130,246,.15)}
-        @keyframes gShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+        .cta-btn::before{
+          content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);
+          animation:nwScan 4s ease-in-out infinite;
+          pointer-events:none;
+        }
+        .cta-btn::after{
+          content:'';position:absolute;inset:0;
+          background:linear-gradient(180deg,rgba(255,255,255,.1) 0%,transparent 50%);
+          pointer-events:none;
+        }
+        .cta-btn:hover{
+          transform:translateY(-2px) scale(1.03);
+          box-shadow:0 0 25px rgba(59,130,246,.4),0 0 60px rgba(59,130,246,.15),inset 0 0 20px rgba(59,130,246,.1);
+          filter:brightness(1.15);
+        }
+        .cta-btn:active{transform:translateY(0) scale(.98);filter:brightness(.95)}
+
+        /* CTA OUTLINE */
         .cta-out{
-          padding:16px 42px;border-radius:10px;cursor:pointer;
-          font-family:'Orbitron',sans-serif;font-weight:600;font-size:12px;letter-spacing:2px;color:#3b82f6;
-          background:transparent;border:1.5px solid rgba(59,130,246,.25);transition:all .3s;
+          position:relative;overflow:hidden;
+          padding:16px 44px;cursor:pointer;
+          font-family:'Orbitron',sans-serif;font-weight:600;font-size:11px;letter-spacing:3px;
+          color:#3b82f6;text-transform:uppercase;
+          background:rgba(59,130,246,.04);
+          border:1.5px solid rgba(59,130,246,.25);
+          clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+          transition:all .3s cubic-bezier(.16,1,.3,1);
+          text-decoration:none;
         }
-        .cta-out:hover{border-color:#3b82f6;background:rgba(59,130,246,.06);box-shadow:0 0 25px rgba(59,130,246,.12)}
+        .cta-out::before{
+          content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(59,130,246,.08),transparent);
+          animation:nwScan 5s ease-in-out infinite;
+          pointer-events:none;
+        }
+        .cta-out:hover{
+          border-color:#3b82f6;
+          background:rgba(59,130,246,.1);
+          box-shadow:0 0 20px rgba(59,130,246,.15),0 0 40px rgba(59,130,246,.05);
+          transform:translateY(-2px);
+          text-shadow:0 0 8px rgba(59,130,246,.5);
+        }
+        .cta-out:active{transform:translateY(0) scale(.98)}
+
+        /* ═══ AGENT ARENA - FLOATING DOCK ═══ */
+
+        .agent-dock-container{
+          position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+          z-index:1000;display:flex;flex-direction:column;align-items:center;gap:0;
+          animation:dockSlideUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.3s both;
+        }
+        @keyframes dockSlideUp{
+          0%{opacity:0;transform:translateX(-50%) translateY(40px)}
+          100%{opacity:1;transform:translateX(-50%) translateY(0)}
+        }
+
+        .dock-status-line{
+          width:40px;height:2px;border-radius:1px;margin-bottom:6px;
+          transition:background 0.5s, width 0.5s;
+          box-shadow:0 0 10px currentColor;
+          animation:statusPulse 2s ease-in-out infinite;
+        }
+        @keyframes statusPulse{0%,100%{opacity:0.5;width:40px}50%{opacity:1;width:60px}}
+
+        .agent-dock{
+          display:flex;align-items:flex-end;gap:4px;
+          padding:8px 12px 10px;
+          background:rgba(8,10,18,0.85);
+          backdrop-filter:blur(24px) saturate(1.5);
+          border:1px solid rgba(59,130,246,0.1);
+          clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+          box-shadow:0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.04), inset 0 1px 0 rgba(59,130,246,0.06);
+        }
+
+        .dock-item{
+          position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+          padding:0 2px;
+        }
+
+        .dock-item-glow{
+          position:absolute;top:-10px;left:-10px;right:-10px;bottom:-10px;
+          border-radius:50%;transition:all 0.3s;pointer-events:none;
+        }
+
+        .dock-item-icon{
+          position:relative;
+          width:42px;height:42px;
+          display:flex;align-items:center;justify-content:center;
+          border:1px solid;transition:all 0.25s;
+          clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+        }
+
+        .dock-item-active .dock-item-icon{
+          background:rgba(59,130,246,0.12) !important;
+        }
+
+        .dock-badge{
+          position:absolute;top:-4px;right:-4px;
+          display:flex;align-items:center;gap:3px;
+          padding:1px 5px;border-radius:6px;
+          background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.3);
+          font-size:7px;font-family:'Fira Code';color:#10b981;letter-spacing:0.5px;
+          font-weight:600;
+        }
+        .dock-badge-dot{
+          width:4px;height:4px;border-radius:50%;background:#10b981;
+          animation:badgePulse 1.5s ease-in-out infinite;
+        }
+        @keyframes badgePulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+        .dock-tooltip{
+          position:absolute;bottom:100%;left:50%;
+          margin-bottom:10px;padding:4px 10px;border-radius:6px;
+          background:rgba(15,23,42,0.9);border:1px solid rgba(59,130,246,0.15);
+          transition:all 0.2s;pointer-events:none;white-space:nowrap;
+          font-family:'Fira Code';font-size:9px;letter-spacing:1px;font-weight:500;
+        }
+
+        .dock-active-dot{
+          width:4px;height:4px;border-radius:50%;margin-top:4px;
+          animation:activeDotPulse 2s ease-in-out infinite;
+        }
+        @keyframes activeDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.7)}}
+
+        .dock-separator{
+          width:1px;height:24px;margin:0 6px;align-self:center;
+          background:linear-gradient(180deg,transparent,rgba(255,255,255,0.08),transparent);
+        }
+
+        .dock-power-btn{
+          width:36px !important;height:36px !important;border-radius:10px !important;
+        }
+
+        .spin-slow{animation:spinSlow 2s linear infinite}
+        @keyframes spinSlow{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+
+        /* ── DOCK PANEL ── */
+        .dock-panel-overlay{
+          position:fixed;top:0;left:0;right:0;bottom:0;z-index:999;
+          background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);
+          animation:panelFadeIn 0.2s ease;
+        }
+        @keyframes panelFadeIn{0%{opacity:0}100%{opacity:1}}
+
+        .dock-panel{
+          position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+          width:min(420px,calc(100vw - 32px));
+          animation:panelSlideUp 0.35s cubic-bezier(0.16,1,0.3,1);
+        }
+        @keyframes panelSlideUp{
+          0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(0.95)}
+          100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+        }
+
+        .dock-panel-inner{
+          background:rgba(8,12,20,0.95);backdrop-filter:blur(24px) saturate(1.4);
+          border:1px solid rgba(59,130,246,0.12);
+          clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+          box-shadow:0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.04);
+          overflow:hidden;
+        }
+
+        .dock-panel-header{
+          display:flex;align-items:center;justify-content:space-between;
+          padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.04);
+        }
+
+        .dock-panel-close{
+          background:none;border:none;cursor:pointer;padding:4px;border-radius:6px;
+          transition:background 0.2s;
+        }
+        .dock-panel-close:hover{background:rgba(255,255,255,0.06)}
+
+        .panel-content{padding:16px 18px 20px}
+
+        .panel-status-row{
+          display:flex;align-items:center;gap:8px;margin-bottom:16px;
+          padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.02);
+          border:1px solid rgba(255,255,255,0.04);
+        }
+        .panel-status-indicator{
+          width:6px;height:6px;border-radius:50%;
+          animation:statusBlink 2s ease-in-out infinite;
+        }
+        @keyframes statusBlink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+        .panel-agent-actions{display:flex;flex-direction:column;gap:6px}
+
+        .panel-action-btn{
+          display:flex;align-items:center;gap:10px;width:100%;
+          padding:10px 12px;cursor:pointer;
+          background:rgba(59,130,246,0.03);border:1px solid rgba(59,130,246,0.1);
+          color:#3b82f6;transition:all 0.25s;text-align:left;
+          position:relative;overflow:hidden;
+          clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+          font-family:'Orbitron',sans-serif;
+        }
+        .panel-action-btn::before{
+          content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(59,130,246,.06),transparent);
+          transition:left 0.4s;pointer-events:none;
+        }
+        .panel-action-btn:hover::before{left:100%}
+        .panel-action-btn:hover{
+          background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.3);
+          box-shadow:0 0 15px rgba(59,130,246,0.06);
+        }
+
+        .panel-vault-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+        .panel-stat-card{
+          padding:14px;border-radius:10px;
+          background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);
+        }
+
+        .panel-vault-actions{display:flex;gap:8px}
+
+        .arena-btn{
+          flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+          padding:10px;cursor:pointer;position:relative;overflow:hidden;
+          font-family:'Orbitron';font-size:9px;font-weight:700;letter-spacing:1.5px;
+          transition:all 0.25s;text-transform:uppercase;
+          clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+        }
+        .arena-btn::before{
+          content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);
+          animation:nwScan 4s ease-in-out infinite;pointer-events:none;
+        }
+        .arena-btn-primary{
+          background:linear-gradient(135deg,#3b82f6,#3b82f6);
+          border:none;color:#04060b;
+          box-shadow:0 0 12px rgba(59,130,246,.15);
+        }
+        .arena-btn-primary:hover{
+          box-shadow:0 0 25px rgba(59,130,246,.3);
+          filter:brightness(1.15);transform:translateY(-1px);
+        }
+        .arena-btn-outline{
+          background:rgba(59,130,246,.04);
+          border:1px solid rgba(59,130,246,.2);
+          color:#3b82f6;
+        }
+        .arena-btn-outline:hover{
+          border-color:#3b82f6;background:rgba(59,130,246,.1);
+          box-shadow:0 0 15px rgba(59,130,246,.1);
+        }
+
+        .panel-wallet-addr{margin-bottom:14px}
+        .panel-addr-box{
+          display:flex;align-items:center;justify-content:space-between;
+          padding:8px 12px;border-radius:8px;
+          background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);
+        }
+        .panel-addr-box code{font-family:'Fira Code';font-size:12px;color:rgba(255,255,255,0.6)}
+        .panel-copy-btn{
+          background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);
+          color:#3b82f6;font-family:'Orbitron';font-size:8px;letter-spacing:1.5px;
+          padding:3px 10px;cursor:pointer;transition:all 0.2s;
+          clip-path:polygon(3px 0,100% 0,100% calc(100% - 3px),calc(100% - 3px) 100%,0 100%,0 3px);
+        }
+        .panel-copy-btn:hover{background:rgba(59,130,246,0.2);box-shadow:0 0 10px rgba(59,130,246,.1)}
+
+        .panel-wallet-tokens{display:flex;flex-direction:column;gap:6px}
+        .panel-token-row{
+          display:flex;align-items:center;justify-content:space-between;
+          padding:10px 12px;border-radius:8px;
+          background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.03);
+          transition:background 0.2s;
+        }
+        .panel-token-row:hover{background:rgba(255,255,255,0.03)}
+        .panel-token-dot{width:6px;height:6px;border-radius:50%}
+
+        .panel-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .panel-analytics-card{
+          padding:12px;border-radius:10px;
+          background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);
+        }
+
+        .panel-console{
+          max-height:200px;overflow-y:auto;
+          padding:10px;border-radius:8px;
+          background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.04);
+        }
+        .console-line{
+          display:flex;gap:10px;padding:4px 0;
+          animation:consoleFadeIn 0.3s ease both;
+          border-bottom:1px solid rgba(255,255,255,0.02);
+        }
+        .console-line:last-child{border-bottom:none}
+        @keyframes consoleFadeIn{0%{opacity:0;transform:translateX(-8px)}100%{opacity:1;transform:translateX(0)}}
+
+        .panel-settings-list{display:flex;flex-direction:column;gap:6px}
+        .panel-setting-row{
+          display:flex;align-items:center;justify-content:space-between;
+          padding:10px 12px;border-radius:8px;
+          background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.03);
+        }
+        .panel-toggle{
+          width:36px;height:20px;border-radius:10px;cursor:pointer;
+          background:rgba(255,255,255,0.08);position:relative;transition:background 0.3s;
+        }
+        .panel-toggle-on{background:rgba(59,130,246,0.35)}
+        .panel-toggle-knob{
+          position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+          background:#fff;transition:transform 0.3s;
+        }
+        .panel-toggle-on .panel-toggle-knob{transform:translateX(16px)}
+
+        /* ═══ AGENT ARENA - ACTION BUTTONS ═══ */
+
+        .arena-buttons-container{
+          position:fixed;right:20px;bottom:90px;z-index:999;
+          display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+          animation:arenaSlideIn 0.5s cubic-bezier(0.16,1,0.3,1) 0.5s both;
+        }
+        @keyframes arenaSlideIn{
+          0%{opacity:0;transform:translateX(20px)}
+          100%{opacity:1;transform:translateX(0)}
+        }
+
+        .arena-actions{
+          display:flex;flex-direction:column;align-items:flex-end;gap:4px;
+          margin-bottom:4px;
+        }
+
+        .arena-action-chip{
+          display:flex;align-items:center;gap:8px;
+          padding:9px 14px;cursor:pointer;
+          background:rgba(59,130,246,0.04);backdrop-filter:blur(16px);
+          border:1px solid rgba(59,130,246,0.12);
+          transition:all 0.3s cubic-bezier(0.16,1,0.3,1);white-space:nowrap;
+          position:relative;overflow:hidden;
+          clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+        }
+        .arena-action-chip::before{
+          content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(59,130,246,.06),transparent);
+          transition:left 0.4s;pointer-events:none;
+        }
+        .arena-action-chip:hover::before{left:100%}
+        .arena-action-chip:hover{
+          border-color:rgba(59,130,246,0.4);
+          background:rgba(59,130,246,0.1);
+          box-shadow:0 0 20px rgba(59,130,246,.1);
+          transform:translateX(-4px) scale(1.02) !important;
+        }
+
+        .arena-chip-label{
+          font-family:'Orbitron';font-size:9px;font-weight:600;color:#3b82f6;letter-spacing:1.5px;
+        }
+        .arena-chip-hotkey{
+          font-family:'Fira Code';font-size:8px;color:rgba(59,130,246,0.3);
+          padding:1px 5px;
+          background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.1);
+          clip-path:polygon(2px 0,100% 0,100% calc(100% - 2px),calc(100% - 2px) 100%,0 100%,0 2px);
+        }
+
+        .arena-toggle-btn{
+          display:flex;align-items:center;gap:8px;
+          padding:10px 18px;cursor:pointer;
+          background:rgba(59,130,246,0.04);backdrop-filter:blur(16px);
+          border:1px solid rgba(59,130,246,0.15);
+          transition:all 0.3s;position:relative;overflow:hidden;
+          box-shadow:0 4px 20px rgba(0,0,0,0.3);
+          clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+        }
+        .arena-toggle-btn::before{
+          content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(59,130,246,.06),transparent);
+          animation:nwScan 5s ease-in-out infinite;pointer-events:none;
+        }
+        .arena-toggle-btn:hover{
+          border-color:rgba(59,130,246,0.35);
+          box-shadow:0 4px 30px rgba(59,130,246,0.08);
+        }
+        .arena-toggle-open{
+          border-color:rgba(59,130,246,0.3);
+          background:rgba(59,130,246,0.08);
+        }
+        .arena-toggle-label{
+          font-family:'Orbitron';font-size:9px;font-weight:700;color:#3b82f6;letter-spacing:2px;
+        }
+
+        .sparkle-pulse{animation:sparklePulse 2s ease-in-out infinite}
+        @keyframes sparklePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.85)}}
 
         @media(max-width:768px){
           .cards-grid{grid-template-columns:1fr !important}
@@ -464,6 +1278,10 @@ export default function LandingPage() {
           .hero-title{font-size:30px !important}
           .cta-row{flex-direction:column !important;align-items:center !important}
           .tech-wrap{grid-template-columns:repeat(2,1fr) !important}
+          .agent-dock{padding:6px 8px 8px;gap:2px}
+          .dock-item-icon{width:36px !important;height:36px !important}
+          .arena-buttons-container{right:12px;bottom:80px}
+          .dock-panel{width:calc(100vw - 24px) !important}
         }
       `}</style>
 
@@ -493,12 +1311,12 @@ export default function LandingPage() {
         }}>● STARKNET</div>
       </header>
 
-      <main style={{ position: "relative", zIndex: 10 }}>
+      <main style={{ position: "relative", zIndex: 10, paddingBottom: 100 }}>
 
         {/* ── HERO ── */}
         <SectionReveal>
           <section style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "120px 24px 80px" }}>
-            <div className="tag-flash" style={{ display: "inline-block", padding: "5px 14px", borderRadius: 6, marginBottom: 22, background: "rgba(59,130,246,.07)", border: "1px solid rgba(59,130,246,.18)", fontFamily: "Orbitron", fontSize: 9, fontWeight: 700, color: "#3b82f6", letterSpacing: 4 }}>
+            <div className="tag-flash" style={{ display: "inline-block", padding: "5px 14px", marginBottom: 22, background: "rgba(59,130,246,.07)", border: "1px solid rgba(59,130,246,.18)", fontFamily: "Orbitron", fontSize: 9, fontWeight: 700, color: "#3b82f6", letterSpacing: 4 }}>
               PRIVACY-PRESERVING BTC DEFI
             </div>
             <GlitchText>
@@ -512,7 +1330,7 @@ export default function LandingPage() {
             </p>
             <div className="cta-row" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
               <a href="/stake"><button className="cta-btn">LAUNCH APP</button></a>
-              <button className="cta-out">READ DOCS</button>
+              <a href="/docs"><button className="cta-out">READ DOCS</button></a>
             </div>
             <div style={{ marginTop: 56, display: "flex", gap: 44, flexWrap: "wrap", justifyContent: "center" }}>
               {[
@@ -626,7 +1444,7 @@ export default function LandingPage() {
             </p>
             <div className="cta-row" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
               <a href="/stake"><button className="cta-btn">START BUILDING</button></a>
-              <button className="cta-out">VIEW PRD</button>
+              <a href="/docs"><button className="cta-out">VIEW DOCS</button></a>
             </div>
             <div style={{ marginTop: 56, fontFamily: "'Fira Code'", fontSize: 9, color: "rgba(255,255,255,.12)", letterSpacing: 2 }}>
               OBSCURA v1.5 — STARKNET — CAIRO — NOIR — GARAGA
@@ -634,6 +1452,10 @@ export default function LandingPage() {
           </section>
         </SectionReveal>
       </main>
+
+      {/* ═══ AGENT ARENA ELEMENTS ═══ */}
+      <AgentArenaButtons />
+      <AgentDock />
     </div>
   );
 }
@@ -658,7 +1480,7 @@ function SectionHeader({ icon: Icon, tag, title, color, subtitle }: SectionHeade
   return (
     <div style={{ marginBottom: 4 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <div className="tag-flash" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 6, background: `${color}0d`, border: `1px solid ${color}28`, fontFamily: "Orbitron", fontSize: 9, fontWeight: 700, color, letterSpacing: 3 }}>
+        <div className="tag-flash" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", background: `${color}0d`, border: `1px solid ${color}28`, fontFamily: "Orbitron", fontSize: 9, fontWeight: 700, color, letterSpacing: 3 }}>
           {Icon && <Icon size={12} strokeWidth={2} />}
           {tag}
         </div>
