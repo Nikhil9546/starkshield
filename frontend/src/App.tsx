@@ -1,6 +1,7 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { WalletProvider } from './hooks/useWallet';
 import WalletConnect from './components/WalletConnect';
+import ObscuraLogo, { logoStyles } from './components/ObscuraLogo';
 import LandingPage from './pages/LandingPage';
 import DocsPage from './pages/DocsPage';
 import StakePage from './pages/StakePage';
@@ -20,6 +21,10 @@ const navItems = [
 function AppLayout() {
   return (
     <div className="relative min-h-screen flex flex-col z-10">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;800;900&display=swap');
+        ${logoStyles}
+      `}</style>
       {/* Top ambient glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-glow-shield pointer-events-none z-0" />
 
@@ -28,16 +33,10 @@ function AppLayout() {
           <div className="flex items-center gap-10">
             {/* Logo */}
             <NavLink to="/" className="flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-lg bg-shield-600 flex items-center justify-center shadow-glow-sm group-hover:shadow-glow-md transition-shadow duration-300">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="white" strokeWidth="1.5" fill="none" />
-                  <path d="M8 5L11 6.75V10.25L8 12L5 10.25V6.75L8 5Z" fill="white" fillOpacity="0.9" />
-                </svg>
+              <div className="group-hover:scale-105 transition-transform duration-300">
+                <ObscuraLogo size={32} glow animated />
               </div>
-              <span className="text-lg font-bold tracking-tight">
-                <span className="text-white">Obs</span>
-                <span className="text-shield-400">cura</span>
-              </span>
+              <span style={{ fontFamily: "'Orbitron', sans-serif", fontWeight: 800, fontSize: 14, color: "#fff", letterSpacing: 3 }}>OBSCURA</span>
             </NavLink>
 
             {/* Navigation */}

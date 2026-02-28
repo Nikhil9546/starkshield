@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Shield, ShieldCheck, ShieldAlert, Lock, Unlock, Eye, Zap, Target,
   Link2, TrendingUp, Database, Cpu, Layers, Fingerprint, ScanLine,
   Activity, ArrowRight, Binary, FileCode,
   ChevronDown, ChevronUp, Hexagon, CircuitBoard, Waypoints,
-  Bot, Wallet, BarChart3, Settings, Terminal, Radio,
-  RefreshCw, Send, Sparkles, Search, X, Gauge, AlertTriangle, Play,
+  Wallet, Settings, Radio,
+  Sparkles, X, Play,
   LucideIcon
 } from "lucide-react";
+import ObscuraLogo, { logoStyles } from "../components/ObscuraLogo";
 
 // ─── PARTICLE SYSTEM (mouse-reactive) ───
 const ParticleField = () => {
@@ -202,15 +203,6 @@ const DataStream = ({ side = "left" }: { side?: "left" | "right" }) => {
   );
 };
 
-// ─── SHIELD ICON SVG ───
-const ShieldLogo = ({ size = 40, glow = false }: { size?: number; glow?: boolean }) => (
-  <div className={glow ? "shield-glow" : ""}>
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <path d="M9 12l2 2 4-4" strokeWidth="2" />
-    </svg>
-  </div>
-);
 
 // ─── AGENT ARENA FLOATING DOCK ───
 const AgentDock = () => {
@@ -227,30 +219,29 @@ const AgentDock = () => {
   }, []);
 
   const dockItems = [
-    { icon: Bot, label: "Agent", color: "#3b82f6", panel: "agent", badge: agentStatus === "active" ? "LIVE" : null },
-    { icon: Shield, label: "Vault", color: "#8b5cf6", panel: "vault" },
-    { icon: Wallet, label: "Wallet", color: "#06b6d4", panel: "wallet" },
-    { icon: BarChart3, label: "Analytics", color: "#10b981", panel: "analytics" },
-    { icon: Terminal, label: "Console", color: "#f59e0b", panel: "console" },
-    { icon: Settings, label: "Config", color: "#6b7280", panel: "settings" },
+    { icon: TrendingUp, label: "Stake", color: "#3b82f6", panel: "stake", badge: agentStatus === "active" ? "LIVE" : null },
+    { icon: Layers, label: "CDP", color: "#8b5cf6", panel: "cdp" },
+    { icon: Unlock, label: "Withdraw", color: "#06b6d4", panel: "withdraw" },
+    { icon: Fingerprint, label: "Proofs", color: "#10b981", panel: "proofs" },
+    { icon: Wallet, label: "Wallet", color: "#f59e0b", panel: "wallet" },
+    { icon: Settings, label: "Settings", color: "#6b7280", panel: "settings" },
   ];
-
-  const getScale = (idx: number) => {
-    if (hoveredIdx === -1) return 1;
-    const diff = Math.abs(idx - hoveredIdx);
-    if (diff === 0) return 1.45;
-    if (diff === 1) return 1.2;
-    if (diff === 2) return 1.05;
-    return 1;
-  };
 
   const getTranslateY = (idx: number) => {
     if (hoveredIdx === -1) return 0;
     const diff = Math.abs(idx - hoveredIdx);
-    if (diff === 0) return -18;
-    if (diff === 1) return -8;
-    if (diff === 2) return -3;
+    if (diff === 0) return -14;
+    if (diff === 1) return -6;
+    if (diff === 2) return -2;
     return 0;
+  };
+
+  const getIconScale = (idx: number) => {
+    if (hoveredIdx === -1) return 1;
+    const diff = Math.abs(idx - hoveredIdx);
+    if (diff === 0) return 1.2;
+    if (diff === 1) return 1.08;
+    return 1;
   };
 
   return (
@@ -275,8 +266,8 @@ const AgentDock = () => {
 
         <div className="agent-dock">
           {dockItems.map((item, idx) => {
-            const scale = getScale(idx);
             const translateY = getTranslateY(idx);
+            const iconScale = getIconScale(idx);
             const isHovered = hoveredIdx === idx;
             const isActive = expandedPanel === item.panel;
 
@@ -288,8 +279,8 @@ const AgentDock = () => {
                 onMouseLeave={() => setHoveredIdx(-1)}
                 onClick={() => setExpandedPanel(expandedPanel === item.panel ? null : item.panel)}
                 style={{
-                  transform: `scale(${scale}) translateY(${translateY}px)`,
-                  transition: "all 0.25s cubic-bezier(0.32, 0.72, 0, 1)",
+                  transform: `translateY(${translateY}px)`,
+                  transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
                   zIndex: isHovered ? 10 : 1,
                 }}
               >
@@ -304,6 +295,8 @@ const AgentDock = () => {
                   background: isActive ? `${item.color}20` : `rgba(255,255,255,0.04)`,
                   borderColor: isHovered || isActive ? `${item.color}50` : "rgba(255,255,255,0.06)",
                   boxShadow: isHovered ? `0 4px 20px ${item.color}20, inset 0 0 20px ${item.color}08` : "none",
+                  transform: `scale(${iconScale})`,
+                  transition: "all 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
                 }}>
                   <item.icon size={18} color={isActive ? item.color : isHovered ? item.color : "rgba(255,255,255,0.5)"} strokeWidth={1.5} />
 
@@ -343,13 +336,15 @@ const AgentDock = () => {
             onMouseEnter={() => setHoveredIdx(99)}
             onMouseLeave={() => setHoveredIdx(-1)}
             style={{
-              transform: `scale(${hoveredIdx === 99 ? 1.3 : 1}) translateY(${hoveredIdx === 99 ? -12 : 0}px)`,
-              transition: "all 0.25s cubic-bezier(0.32, 0.72, 0, 1)",
+              transform: `translateY(${hoveredIdx === 99 ? -8 : 0}px)`,
+              transition: "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
             }}
           >
             <div className="dock-item-icon dock-power-btn" style={{
               borderColor: agentStatus === "active" ? "#10b98140" :
                 agentStatus === "scanning" ? "#f59e0b40" : "rgba(255,255,255,0.06)",
+              transform: `scale(${hoveredIdx === 99 ? 1.1 : 1})`,
+              transition: "all 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
             }}>
               <Radio size={16} color={
                 agentStatus === "active" ? "#10b981" :
@@ -373,26 +368,31 @@ const AgentDock = () => {
 };
 
 // ─── DOCK PANEL CONTENT ───
-const DockPanel = ({ type, onClose, agentStatus }: { type: string; onClose: () => void; agentStatus: string }) => {
+const DockPanel = ({ type, onClose }: { type: string; onClose: () => void; agentStatus: string }) => {
   const panels: Record<string, { title: string; icon: LucideIcon; color: string; content: React.ReactNode }> = {
-    agent: {
-      title: "SHIELD AGENT",
-      icon: Bot,
+    stake: {
+      title: "STAKE BTC",
+      icon: TrendingUp,
       color: "#3b82f6",
       content: (
         <div className="panel-content">
-          <div className="panel-status-row">
-            <div className="panel-status-indicator" style={{ background: agentStatus === "active" ? "#10b981" : "#3b82f6" }} />
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: "'Fira Code'" }}>
-              Agent Status: {agentStatus.toUpperCase()}
-            </span>
+          <div className="panel-vault-stats">
+            <div className="panel-stat-card">
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>sxyBTC BALANCE</div>
+              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#3b82f6" }}>▓▓▓.▓▓</div>
+              <div style={{ fontSize: 8, color: "rgba(59,130,246,0.5)" }}>SHIELDED</div>
+            </div>
+            <div className="panel-stat-card">
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>EXCHANGE RATE</div>
+              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#10b981" }}>1.042</div>
+              <div style={{ fontSize: 8, color: "rgba(16,185,129,0.5)" }}>xyBTC / BTC</div>
+            </div>
           </div>
           <div className="panel-agent-actions">
             {[
-              { label: "Scan Mempool", icon: Search, desc: "Monitor for MEV threats" },
-              { label: "Shield Balance", icon: Shield, desc: "Encrypt visible positions" },
-              { label: "Auto-Compound", icon: RefreshCw, desc: "Reinvest yield privately" },
-              { label: "Risk Assessment", icon: AlertTriangle, desc: "Evaluate collateral health" },
+              { label: "Deposit BTC", icon: ArrowRight, desc: "Deposit WBTC → stake via Endur → receive xyBTC" },
+              { label: "Shield to sxyBTC", icon: Shield, desc: "Wrap xyBTC → ElGamal encrypted sxyBTC" },
+              { label: "View TVL", icon: Database, desc: "Total protocol value locked on-chain" },
             ].map((action, i) => (
               <button key={i} className="panel-action-btn">
                 <action.icon size={14} strokeWidth={1.5} />
@@ -407,43 +407,108 @@ const DockPanel = ({ type, onClose, agentStatus }: { type: string; onClose: () =
         </div>
       ),
     },
-    vault: {
-      title: "SHIELDED VAULT",
-      icon: Shield,
+    cdp: {
+      title: "SHIELDED CDP",
+      icon: Layers,
       color: "#8b5cf6",
       content: (
         <div className="panel-content">
           <div className="panel-vault-stats">
             <div className="panel-stat-card">
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>SHIELDED BTC</div>
-              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#8b5cf6" }}>▓▓▓.▓▓</div>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>COLLATERAL (sxyBTC)</div>
+              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#8b5cf6" }}>▓▓.▓▓</div>
               <div style={{ fontSize: 8, color: "rgba(139,92,246,0.5)" }}>ENCRYPTED</div>
             </div>
             <div className="panel-stat-card">
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>YIELD (APY)</div>
-              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#10b981" }}>▓.▓▓%</div>
-              <div style={{ fontSize: 8, color: "rgba(16,185,129,0.5)" }}>PRIVATE</div>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>MINTED sUSD</div>
+              <div style={{ fontSize: 22, fontFamily: "'Orbitron'", fontWeight: 900, color: "#f59e0b" }}>▓▓▓.▓▓</div>
+              <div style={{ fontSize: 8, color: "rgba(245,158,11,0.5)" }}>SHIELDED DEBT</div>
             </div>
+          </div>
+          <div className="panel-status-row">
+            <div className="panel-status-indicator" style={{ background: "#10b981" }} />
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontFamily: "'Fira Code'" }}>
+              Collateral Ratio: ≥ 200% (ZK Verified)
+            </span>
           </div>
           <div className="panel-vault-actions">
             <button className="arena-btn arena-btn-primary" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties}>
-              <Lock size={12} /> DEPOSIT & SHIELD
+              <Lock size={12} /> LOCK & MINT sUSD
             </button>
             <button className="arena-btn arena-btn-outline" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties}>
-              <Unlock size={12} /> UNSHIELD
+              <Unlock size={12} /> REPAY DEBT
             </button>
           </div>
         </div>
       ),
     },
-    wallet: {
-      title: "CONNECTED WALLET",
-      icon: Wallet,
+    withdraw: {
+      title: "WITHDRAW",
+      icon: Unlock,
       color: "#06b6d4",
       content: (
         <div className="panel-content">
+          <div className="panel-agent-actions">
+            {[
+              { label: "Unshield sxyBTC", icon: Unlock, desc: "Decrypt sxyBTC → xyBTC with balance proof" },
+              { label: "Unstake xyBTC", icon: ArrowRight, desc: "Burn xyBTC → receive WBTC via Endur" },
+              { label: "Repay & Unlock CDP", icon: Lock, desc: "Repay sUSD → unlock sxyBTC collateral" },
+            ].map((action, i) => (
+              <button key={i} className="panel-action-btn">
+                <action.icon size={14} strokeWidth={1.5} />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{action.label}</div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)" }}>{action.desc}</div>
+                </div>
+                <Play size={10} color="rgba(255,255,255,0.2)" style={{ marginLeft: "auto" }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    proofs: {
+      title: "ZK PROOFS",
+      icon: Fingerprint,
+      color: "#10b981",
+      content: (
+        <div className="panel-content">
+          <div className="panel-console">
+            {[
+              { time: "12:04:22", msg: "Range proof: deposit amount valid", type: "success" },
+              { time: "12:04:18", msg: "ElGamal ciphertext generated", type: "info" },
+              { time: "12:04:15", msg: "Garaga verifier: PASS", type: "success" },
+              { time: "12:04:12", msg: "Collateral ratio proof: ≥ 200%", type: "success" },
+              { time: "12:04:08", msg: "Noir circuit: balance_sufficiency", type: "info" },
+              { time: "12:04:01", msg: "Solvency domain check: VALID", type: "success" },
+            ].map((log, i) => (
+              <div key={i} className="console-line" style={{ animationDelay: `${i * 0.08}s` }}>
+                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 9, fontFamily: "'Fira Code'" }}>{log.time}</span>
+                <span style={{ color: log.type === "success" ? "#10b981" : "#3b82f6", fontSize: 10, fontFamily: "'Fira Code'" }}>{log.msg}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <div className="panel-analytics-card" style={{ flex: 1 }}>
+              <div style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1.5, marginBottom: 4 }}>NOIR CIRCUITS</div>
+              <span style={{ fontSize: 20, fontFamily: "'Orbitron'", fontWeight: 900, color: "#10b981" }}>7</span>
+            </div>
+            <div className="panel-analytics-card" style={{ flex: 1 }}>
+              <div style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1.5, marginBottom: 4 }}>GARAGA VERIFIED</div>
+              <span style={{ fontSize: 20, fontFamily: "'Orbitron'", fontWeight: 900, color: "#10b981" }}>100%</span>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    wallet: {
+      title: "CONNECT WALLET",
+      icon: Wallet,
+      color: "#f59e0b",
+      content: (
+        <div className="panel-content">
           <div className="panel-wallet-addr">
-            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", marginBottom: 6 }}>ADDRESS</div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", marginBottom: 6 }}>STARKNET ADDRESS</div>
             <div className="panel-addr-box">
               <code>0x7a3f...8b2e</code>
               <button className="panel-copy-btn">COPY</button>
@@ -451,13 +516,14 @@ const DockPanel = ({ type, onClose, agentStatus }: { type: string; onClose: () =
           </div>
           <div className="panel-wallet-tokens">
             {[
+              { name: "WBTC", amount: "—.——", status: "Public" },
               { name: "xyBTC", amount: "—.——", status: "Public" },
               { name: "sxyBTC", amount: "▓▓.▓▓", status: "Shielded" },
               { name: "sUSD", amount: "▓▓▓.▓▓", status: "Shielded" },
             ].map((tok, i) => (
               <div key={i} className="panel-token-row">
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div className="panel-token-dot" style={{ background: tok.status === "Shielded" ? "#8b5cf6" : "#06b6d4" }} />
+                  <div className="panel-token-dot" style={{ background: tok.status === "Shielded" ? "#8b5cf6" : "#3b82f6" }} />
                   <span style={{ fontSize: 11, fontFamily: "'Orbitron'", fontWeight: 600, color: "#fff" }}>{tok.name}</span>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -470,67 +536,18 @@ const DockPanel = ({ type, onClose, agentStatus }: { type: string; onClose: () =
         </div>
       ),
     },
-    analytics: {
-      title: "PRIVACY ANALYTICS",
-      icon: BarChart3,
-      color: "#10b981",
-      content: (
-        <div className="panel-content">
-          <div className="panel-analytics-grid">
-            {[
-              { label: "Privacy Score", value: "94", unit: "/100", color: "#10b981" },
-              { label: "Shield Rate", value: "87", unit: "%", color: "#8b5cf6" },
-              { label: "MEV Blocked", value: "23", unit: "txns", color: "#ef4444" },
-              { label: "Gas Saved", value: "0.12", unit: "ETH", color: "#f59e0b" },
-            ].map((stat, i) => (
-              <div key={i} className="panel-analytics-card">
-                <div style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "'Fira Code'", letterSpacing: 1.5, marginBottom: 4 }}>{stat.label.toUpperCase()}</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-                  <span style={{ fontSize: 20, fontFamily: "'Orbitron'", fontWeight: 900, color: stat.color }}>{stat.value}</span>
-                  <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{stat.unit}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ),
-    },
-    console: {
-      title: "ZK CONSOLE",
-      icon: Terminal,
-      color: "#f59e0b",
-      content: (
-        <div className="panel-content">
-          <div className="panel-console">
-            {[
-              { time: "12:04:22", msg: "Range proof compiled — 2.4s", type: "success" },
-              { time: "12:04:18", msg: "ElGamal ciphertext generated", type: "info" },
-              { time: "12:04:15", msg: "Garaga verifier: PASS", type: "success" },
-              { time: "12:04:12", msg: "Collateral ratio proof: ≥ 200%", type: "info" },
-              { time: "12:04:08", msg: "Noir circuit: balance_sufficiency", type: "info" },
-              { time: "12:04:01", msg: "Solvency domain check: VALID", type: "success" },
-            ].map((log, i) => (
-              <div key={i} className="console-line" style={{ animationDelay: `${i * 0.08}s` }}>
-                <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 9, fontFamily: "'Fira Code'" }}>{log.time}</span>
-                <span style={{ color: log.type === "success" ? "#10b981" : "#f59e0b", fontSize: 10, fontFamily: "'Fira Code'" }}>{log.msg}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ),
-    },
     settings: {
-      title: "CONFIGURATION",
+      title: "SETTINGS",
       icon: Settings,
       color: "#6b7280",
       content: (
         <div className="panel-content">
           <div className="panel-settings-list">
             {[
-              { label: "Auto-Shield Deposits", enabled: true },
+              { label: "Auto-Shield on Deposit", enabled: true },
               { label: "MEV Protection", enabled: true },
-              { label: "Private Yield Compound", enabled: false },
               { label: "Proof Caching", enabled: true },
+              { label: "Sepolia Testnet", enabled: true },
             ].map((setting, i) => (
               <div key={i} className="panel-setting-row">
                 <span style={{ fontSize: 11, color: "#fff" }}>{setting.label}</span>
@@ -569,11 +586,11 @@ const AgentArenaButtons = () => {
   const [expanded, setExpanded] = useState(false);
 
   const actions = [
-    { icon: Shield, label: "Quick Shield", color: "#3b82f6", hotkey: "⌘S" },
-    { icon: Zap, label: "Flash Mint", color: "#8b5cf6", hotkey: "⌘M" },
-    { icon: Send, label: "Private Send", color: "#06b6d4", hotkey: "⌘P" },
-    { icon: RefreshCw, label: "Compound", color: "#10b981", hotkey: "⌘C" },
-    { icon: Gauge, label: "Health Check", color: "#f59e0b", hotkey: "⌘H" },
+    { icon: TrendingUp, label: "Stake BTC", color: "#3b82f6", hotkey: "⌘1" },
+    { icon: Shield, label: "Shield", color: "#3b82f6", hotkey: "⌘2" },
+    { icon: Layers, label: "Mint sUSD", color: "#8b5cf6", hotkey: "⌘3" },
+    { icon: Unlock, label: "Withdraw", color: "#06b6d4", hotkey: "⌘4" },
+    { icon: Fingerprint, label: "Verify Proof", color: "#10b981", hotkey: "⌘5" },
   ];
 
   return (
@@ -658,7 +675,6 @@ const techStack = [
 
 // ─── MAIN ───
 export default function LandingPage() {
-  const navigate = useNavigate();
   const [bootDone, setBootDone] = useState(false);
   const [bootLine, setBootLine] = useState(0);
   const [scrollY, setScrollY] = useState(0);
@@ -695,10 +711,11 @@ export default function LandingPage() {
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&family=Orbitron:wght@400;500;700;900&family=Outfit:wght@200;300;400;500;600;700;800;900&display=swap');
           .bl{opacity:0;animation:bi .3s forwards}@keyframes bi{to{opacity:1}}
+          ${logoStyles}
         `}</style>
         <div style={{ maxWidth: 560, padding: 40 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
-            <Shield size={24} color="#3b82f6" strokeWidth={1.5} />
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+            <ObscuraLogo size={36} glow animated />
             <span style={{ color: "#3b82f6", fontSize: 10, letterSpacing: 4, opacity: 0.5 }}>OBSCURA v1.5</span>
           </div>
           {bootMsgs.slice(0, bootLine).map((m, i) => (
@@ -717,6 +734,8 @@ export default function LandingPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&family=Orbitron:wght@400;500;700;900&family=Outfit:wght@200;300;400;500;600;700;800;900&display=swap');
         *{margin:0;padding:0;box-sizing:border-box}
+
+        ${logoStyles}
 
         .scan-beam{position:fixed;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,rgba(59,130,246,.1),transparent);animation:scanD 5s linear infinite;box-shadow:0 0 25px rgba(59,130,246,.06);pointer-events:none;z-index:998}
         @keyframes scanD{0%{top:-2px}100%{top:100vh}}
@@ -964,7 +983,7 @@ export default function LandingPage() {
 
         .dock-item{
           position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;
-          padding:0 2px;
+          padding:0 4px;width:50px;flex-shrink:0;
         }
 
         .dock-item-glow{
@@ -1302,7 +1321,7 @@ export default function LandingPage() {
         transition: "all .4s", display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="shield-glow"><Shield size={26} color="#3b82f6" strokeWidth={1.5} /></div>
+          <ObscuraLogo size={30} glow animated />
           <span style={{ fontFamily: "Orbitron", fontWeight: 800, fontSize: 14, color: "#fff", letterSpacing: 3 }}>OBSCURA</span>
           <span style={{ fontSize: 9, color: "rgba(59,130,246,.35)", fontFamily: "'Fira Code'", letterSpacing: 1 }}>v1.5</span>
         </div>
@@ -1331,8 +1350,8 @@ export default function LandingPage() {
               <TypeWriter text="Stake BTC → encrypt balances with ElGamal → mint stablecoins via ZK proofs → verified on-chain by Garaga." speed={22} />
             </p>
             <div className="cta-row" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-              <a href="/stake"><button className="cta-btn">LAUNCH APP</button></a>
-              <a href="/docs"><button className="cta-out">READ DOCS</button></a>
+              <Link to="/stake"><button className="cta-btn">LAUNCH APP</button></Link>
+              <Link to="/docs"><button className="cta-out">READ DOCS</button></Link>
             </div>
             <div style={{ marginTop: 56, display: "flex", gap: 44, flexWrap: "wrap", justifyContent: "center" }}>
               {[
@@ -1434,7 +1453,7 @@ export default function LandingPage() {
         {/* ── CTA ── */}
         <SectionReveal>
           <section style={{ padding: "100px 24px 120px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <ShieldLogo size={52} glow />
+            <ObscuraLogo size={60} glow animated />
             <div style={{ height: 20 }} />
             <GlitchText>
               <h2 style={{ fontFamily: "Orbitron", fontSize: "clamp(22px,3.2vw,38px)", fontWeight: 900, color: "#fff", lineHeight: 1.1, marginBottom: 14 }}>
@@ -1445,8 +1464,8 @@ export default function LandingPage() {
               Privacy is not a feature. It is a prerequisite for adoption at scale.
             </p>
             <div className="cta-row" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
-              <a href="/stake"><button className="cta-btn">START BUILDING</button></a>
-              <a href="/docs"><button className="cta-out">VIEW DOCS</button></a>
+              <Link to="/stake"><button className="cta-btn">START BUILDING</button></Link>
+              <Link to="/docs"><button className="cta-out">VIEW DOCS</button></Link>
             </div>
             <div style={{ marginTop: 56, fontFamily: "'Fira Code'", fontSize: 9, color: "rgba(255,255,255,.12)", letterSpacing: 2 }}>
               OBSCURA v1.5 — STARKNET — CAIRO — NOIR — GARAGA

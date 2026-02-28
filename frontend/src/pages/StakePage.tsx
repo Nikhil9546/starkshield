@@ -4,6 +4,7 @@ import { useBalance } from '../hooks/useBalance';
 import { useProof } from '../hooks/useProof';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
+import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
 import { CircuitType } from '../lib/proofs/circuits';
 import { findValidBlinding, computeCiphertextDelta } from '../lib/privacy/encrypt';
 import { derivePublicKey } from '../lib/privacy/keygen';
@@ -18,6 +19,58 @@ import type { RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness
 /** On devnet, MockProofVerifier accepts anything — skip real proof generation */
 const SKIP_PROOFS = IS_DEVNET;
 const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
+
+// Page-specific styles
+const pageStyles = `
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-10px) rotate(2deg); }
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.1); opacity: 0.1; }
+    100% { transform: scale(1); opacity: 0.3; }
+  }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  .page-glow {
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 600px;
+    background: radial-gradient(ellipse at center, rgba(79,111,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .page-glow-secondary {
+    position: fixed;
+    bottom: -300px;
+    right: -200px;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(ellipse at center, rgba(0,229,255,0.05) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hero-icon {
+    animation: float 6s ease-in-out infinite;
+  }
+  .hero-ring {
+    animation: pulse-ring 3s ease-in-out infinite;
+  }
+  .gradient-text {
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #818cf8 100%);
+    background-size: 200% 200%;
+    animation: gradient-shift 8s ease infinite;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+`;
 
 export default function StakePage() {
   const { account, address, isKeyUnlocked, privacyKey } = useWallet();
@@ -217,16 +270,19 @@ export default function StakePage() {
 
   if (!address) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mb-6">
-          <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
-            <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" stroke="currentColor" strokeWidth="1.2" className="text-shield-400" fill="none" />
-            <path d="M8 5L11 6.75V10.25L8 12L5 10.25V6.75L8 5Z" fill="currentColor" className="text-shield-400" fillOpacity="0.3" />
-          </svg>
+      <>
+        <style>{pageStyles}{logoStyles}</style>
+        <div className="page-glow" />
+        <div className="page-glow-secondary" />
+        <div className="relative z-10 flex flex-col items-center justify-center py-24 text-center">
+          <div className="relative mb-8 hero-icon">
+            <div className="absolute inset-0 w-24 h-24 rounded-full bg-shield-500/15 blur-2xl hero-ring" />
+            <ObscuraLogo size={80} glow animated />
+          </div>
+          <h2 className="text-3xl font-bold gradient-text mb-3">Stake BTC</h2>
+          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to deposit BTC, stake via Endur, and shield into privacy-preserving sxyBTC.</p>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Stake BTC</h2>
-        <p className="text-gray-500 max-w-md">Connect your wallet to deposit BTC, stake via Endur, and shield into privacy-preserving sxyBTC.</p>
-      </div>
+      </>
     );
   }
 
@@ -239,13 +295,23 @@ export default function StakePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      <style>{pageStyles}{logoStyles}</style>
+      <div className="page-glow" />
+      <div className="page-glow-secondary" />
+      <div className="relative z-10 space-y-6">
       {/* Hero Header */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight mb-1">Stake BTC</h2>
-        <p className="text-gray-500">
-          Deposit BTC into the ShieldedVault. Stake via Endur and wrap into privacy-preserving sxyBTC.
-        </p>
+      <div className="mb-8 flex items-start gap-5">
+        <div className="relative flex-shrink-0 hero-icon">
+          <div className="absolute inset-0 w-16 h-16 rounded-full bg-shield-500/15 blur-xl hero-ring" />
+          <ObscuraLogo size={56} glow animated />
+        </div>
+        <div>
+          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Stake BTC</h2>
+          <p className="text-gray-400">
+            Deposit BTC into the ShieldedVault. Stake via Endur and wrap into privacy-preserving sxyBTC.
+          </p>
+        </div>
       </div>
 
       {/* Balance Grid */}
@@ -425,6 +491,7 @@ export default function StakePage() {
         {balancesLoading && <span className="w-3 h-3 border border-gray-500/30 border-t-gray-500 rounded-full animate-spin" />}
         {balancesLoading ? 'Refreshing...' : 'Refresh Balances'}
       </button>
-    </div>
+      </div>
+    </>
   );
 }

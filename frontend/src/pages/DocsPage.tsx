@@ -9,6 +9,7 @@ import {
   Network, Cog, Wallet,
   ArrowLeft, Menu, X, ExternalLink, Copy, Check
 } from "lucide-react";
+import ObscuraLogo, { logoStyles } from "../components/ObscuraLogo";
 
 // ─── PARTICLE SYSTEM ───
 const ParticleField = () => {
@@ -194,7 +195,7 @@ export default function DocsPage() {
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      window.scrollTo({ top: element.offsetTop - 100, behavior: "smooth" });
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     setMobileMenuOpen(false);
   };
@@ -203,6 +204,7 @@ export default function DocsPage() {
     <div className="docs-page">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&family=Orbitron:wght@400;500;700;900&family=Outfit:wght@200;300;400;500;600;700;800;900&display=swap');
+        ${logoStyles}
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -729,9 +731,7 @@ export default function DocsPage() {
             <span>Home</span>
           </Link>
           <div className="docs-logo">
-            <div className="docs-logo-icon">
-              <Shield size={18} color="#fff" strokeWidth={1.5} />
-            </div>
+            <ObscuraLogo size={36} glow animated />
             <div>
               <div className="docs-logo-text">OBSCURA</div>
               <div className="docs-logo-version">Documentation v1.5</div>

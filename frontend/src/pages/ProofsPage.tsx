@@ -1,10 +1,75 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import SolvencyCard from '../components/SolvencyCard';
+import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
 import { CircuitType, preloadCircuits } from '../lib/proofs/circuits';
 import { isVaultSolvent, getVaultLastVerified, isCdpSafe, getCdpLastVerified, getVaultNumAccounts, getVaultAssetsCommitment, getCdpNumCdps, getCdpCollateralCommitment, getProver, submitVaultSolvencyProof, submitCdpSafetyProof } from '../lib/contracts/solvency';
 import { getTotalDeposited } from '../lib/contracts/vault';
 import { loadProofHistory, type ProofRecord } from '../lib/proofHistory';
+
+// Page-specific styles
+const pageStyles = `
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-10px) rotate(1deg); }
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.1); opacity: 0.1; }
+    100% { transform: scale(1); opacity: 0.3; }
+  }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  @keyframes scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+  .page-glow {
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 600px;
+    background: radial-gradient(ellipse at center, rgba(16,185,129,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .page-glow-secondary {
+    position: fixed;
+    bottom: -300px;
+    left: -200px;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(ellipse at center, rgba(79,111,255,0.05) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hero-icon {
+    animation: float 6s ease-in-out infinite;
+  }
+  .hero-ring {
+    animation: pulse-ring 3s ease-in-out infinite;
+  }
+  .gradient-text {
+    background: linear-gradient(135deg, #fff 0%, #6ee7b7 50%, #34d399 100%);
+    background-size: 200% 200%;
+    animation: gradient-shift 8s ease infinite;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .scan-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #10b981, transparent);
+    animation: scan 3s ease-in-out infinite;
+  }
+`;
 
 export default function ProofsPage() {
   const { account, address } = useWallet();
@@ -149,26 +214,40 @@ export default function ProofsPage() {
 
   if (!address) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-shield-600/10 border border-shield-500/20 flex items-center justify-center mb-6">
-          <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
-            <path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-shield-400" fill="none" />
-          </svg>
+      <>
+        <style>{pageStyles}{logoStyles}</style>
+        <div className="page-glow" />
+        <div className="page-glow-secondary" />
+        <div className="relative z-10 flex flex-col items-center justify-center py-24 text-center">
+          <div className="relative mb-8 hero-icon">
+            <div className="absolute inset-0 w-24 h-24 rounded-full bg-emerald-500/15 blur-2xl hero-ring" />
+            <ObscuraLogo size={80} glow animated color="#10b981" />
+          </div>
+          <h2 className="text-3xl font-bold gradient-text mb-3">Proofs Dashboard</h2>
+          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to view proof history and protocol solvency.</p>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Proofs Dashboard</h2>
-        <p className="text-gray-500 max-w-md">Connect your wallet to view proof history and protocol solvency.</p>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <style>{pageStyles}{logoStyles}</style>
+      <div className="page-glow" />
+      <div className="page-glow-secondary" />
+      <div className="relative z-10 space-y-6">
       {/* Hero Header */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight mb-1">Proofs Dashboard</h2>
-        <p className="text-gray-500">
-          Monitor ZK proof generation, verification status, and protocol solvency.
-        </p>
+      <div className="mb-8 flex items-start gap-5">
+        <div className="relative flex-shrink-0 hero-icon">
+          <div className="absolute inset-0 w-16 h-16 rounded-full bg-emerald-500/15 blur-xl hero-ring" />
+          <ObscuraLogo size={56} glow animated color="#10b981" />
+        </div>
+        <div>
+          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Proofs Dashboard</h2>
+          <p className="text-gray-400">
+            Monitor ZK proof generation, verification status, and protocol solvency.
+          </p>
+        </div>
       </div>
 
       {/* Solvency Cards */}
@@ -370,6 +449,7 @@ export default function ProofsPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
