@@ -15,6 +15,7 @@
     "buffer": "^6.0.3",
     "garaga": "^1.0.0",
     "get-starknet-core": "^4.0.0",
+    "lucide-react": "^0.575.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.20.0",
