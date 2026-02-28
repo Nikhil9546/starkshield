@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Shield, ShieldCheck, ShieldAlert, Lock, Unlock, Eye, Zap, Target,
   Link2, TrendingUp, Database, Cpu, Layers, Fingerprint, ScanLine,
@@ -206,6 +206,7 @@ const DataStream = ({ side = "left" }: { side?: "left" | "right" }) => {
 
 // ─── AGENT ARENA FLOATING DOCK ───
 const AgentDock = () => {
+  const navigate = useNavigate();
   const [hoveredIdx, setHoveredIdx] = useState(-1);
   const [expandedPanel, setExpandedPanel] = useState<string | null>(null);
   const [agentStatus, setAgentStatus] = useState("idle");
@@ -250,7 +251,7 @@ const AgentDock = () => {
       {expandedPanel && (
         <div className="dock-panel-overlay" onClick={() => setExpandedPanel(null)}>
           <div className="dock-panel" onClick={e => e.stopPropagation()}>
-            <DockPanel type={expandedPanel} onClose={() => setExpandedPanel(null)} agentStatus={agentStatus} />
+            <DockPanel type={expandedPanel} onClose={() => setExpandedPanel(null)} agentStatus={agentStatus} onNavigate={navigate} />
           </div>
         </div>
       )}
@@ -368,7 +369,7 @@ const AgentDock = () => {
 };
 
 // ─── DOCK PANEL CONTENT ───
-const DockPanel = ({ type, onClose }: { type: string; onClose: () => void; agentStatus: string }) => {
+const DockPanel = ({ type, onClose, onNavigate }: { type: string; onClose: () => void; agentStatus: string; onNavigate: (path: string) => void }) => {
   const panels: Record<string, { title: string; icon: LucideIcon; color: string; content: React.ReactNode }> = {
     stake: {
       title: "STAKE BTC",
@@ -390,11 +391,11 @@ const DockPanel = ({ type, onClose }: { type: string; onClose: () => void; agent
           </div>
           <div className="panel-agent-actions">
             {[
-              { label: "Deposit BTC", icon: ArrowRight, desc: "Deposit WBTC → stake via Endur → receive xyBTC" },
-              { label: "Shield to sxyBTC", icon: Shield, desc: "Wrap xyBTC → ElGamal encrypted sxyBTC" },
-              { label: "View TVL", icon: Database, desc: "Total protocol value locked on-chain" },
+              { label: "Deposit BTC", icon: ArrowRight, desc: "Deposit WBTC → stake via Endur → receive xyBTC", route: "/stake" },
+              { label: "Shield to sxyBTC", icon: Shield, desc: "Wrap xyBTC → ElGamal encrypted sxyBTC", route: "/stake" },
+              { label: "View TVL", icon: Database, desc: "Total protocol value locked on-chain", route: "/proofs" },
             ].map((action, i) => (
-              <button key={i} className="panel-action-btn">
+              <button key={i} className="panel-action-btn" onClick={() => onNavigate(action.route)}>
                 <action.icon size={14} strokeWidth={1.5} />
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{action.label}</div>
@@ -432,10 +433,10 @@ const DockPanel = ({ type, onClose }: { type: string; onClose: () => void; agent
             </span>
           </div>
           <div className="panel-vault-actions">
-            <button className="arena-btn arena-btn-primary" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties}>
+            <button className="arena-btn arena-btn-primary" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties} onClick={() => onNavigate('/cdp')}>
               <Lock size={12} /> LOCK & MINT sUSD
             </button>
-            <button className="arena-btn arena-btn-outline" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties}>
+            <button className="arena-btn arena-btn-outline" style={{ "--btn-color": "#8b5cf6" } as React.CSSProperties} onClick={() => onNavigate('/cdp')}>
               <Unlock size={12} /> REPAY DEBT
             </button>
           </div>
@@ -450,11 +451,11 @@ const DockPanel = ({ type, onClose }: { type: string; onClose: () => void; agent
         <div className="panel-content">
           <div className="panel-agent-actions">
             {[
-              { label: "Unshield sxyBTC", icon: Unlock, desc: "Decrypt sxyBTC → xyBTC with balance proof" },
-              { label: "Unstake xyBTC", icon: ArrowRight, desc: "Burn xyBTC → receive WBTC via Endur" },
-              { label: "Repay & Unlock CDP", icon: Lock, desc: "Repay sUSD → unlock sxyBTC collateral" },
+              { label: "Unshield sxyBTC", icon: Unlock, desc: "Decrypt sxyBTC → xyBTC with balance proof", route: "/withdraw" },
+              { label: "Unstake xyBTC", icon: ArrowRight, desc: "Burn xyBTC → receive WBTC via Endur", route: "/withdraw" },
+              { label: "Repay & Unlock CDP", icon: Lock, desc: "Repay sUSD → unlock sxyBTC collateral", route: "/cdp" },
             ].map((action, i) => (
-              <button key={i} className="panel-action-btn">
+              <button key={i} className="panel-action-btn" onClick={() => onNavigate(action.route)}>
                 <action.icon size={14} strokeWidth={1.5} />
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{action.label}</div>
@@ -583,14 +584,15 @@ const DockPanel = ({ type, onClose }: { type: string; onClose: () => void; agent
 
 // ─── AGENT ARENA ACTION BUTTONS (floating quick actions) ───
 const AgentArenaButtons = () => {
+  const arenaNavigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
 
   const actions = [
-    { icon: TrendingUp, label: "Stake BTC", color: "#3b82f6", hotkey: "⌘1" },
-    { icon: Shield, label: "Shield", color: "#3b82f6", hotkey: "⌘2" },
-    { icon: Layers, label: "Mint sUSD", color: "#8b5cf6", hotkey: "⌘3" },
-    { icon: Unlock, label: "Withdraw", color: "#06b6d4", hotkey: "⌘4" },
-    { icon: Fingerprint, label: "Verify Proof", color: "#10b981", hotkey: "⌘5" },
+    { icon: TrendingUp, label: "Stake BTC", color: "#3b82f6", hotkey: "⌘1", route: "/stake" },
+    { icon: Shield, label: "Shield", color: "#3b82f6", hotkey: "⌘2", route: "/stake" },
+    { icon: Layers, label: "Mint sUSD", color: "#8b5cf6", hotkey: "⌘3", route: "/cdp" },
+    { icon: Unlock, label: "Withdraw", color: "#06b6d4", hotkey: "⌘4", route: "/withdraw" },
+    { icon: Fingerprint, label: "Verify Proof", color: "#10b981", hotkey: "⌘5", route: "/proofs" },
   ];
 
   return (
@@ -601,6 +603,7 @@ const AgentArenaButtons = () => {
           <button
             key={i}
             className="arena-action-chip"
+            onClick={() => arenaNavigate(action.route)}
             style={{
               "--chip-color": action.color,
               transitionDelay: expanded ? `${i * 60}ms` : `${(actions.length - i) * 30}ms`,
