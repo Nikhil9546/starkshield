@@ -14,6 +14,7 @@ import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasC
 import { faucetMint } from '../lib/contracts/vault';
 import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
 import { addProofRecord } from '../lib/proofHistory';
+import { getLocalCDPCollateral, setLocalCDPCollateral, getLocalCDPDebt, setLocalCDPDebt, getCDPColWitness, setCDPColWitness, clearCDPState } from '../lib/shieldedBalance';
 import type { CollateralRatioWitness, ZeroDebtWitness, RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
 
 type CDPAction = 'lock' | 'mint' | 'repay' | 'close';
@@ -200,15 +201,43 @@ export default function CDPPage() {
   const [action, setAction] = useState<CDPAction>('lock');
   const [amount, setAmount] = useState('');
   const [hasCDP, setHasCDP] = useState<boolean | null>(null);
-  // On devnet, on-chain reads may return 0 due to RPC quirks — track locally.
-  // On testnet/mainnet, on-chain state works correctly after proof-verified tx.
-  const [localCollateral, setLocalCollateral] = useState<bigint>(BigInt(0));
-  const [localDebt, setLocalDebt] = useState<bigint>(BigInt(0));
+  // CDP collateral + debt persisted in localStorage so they survive page navigation.
+  const [localCollateral, setLocalCollateralState] = useState<bigint>(() => address ? getLocalCDPCollateral(address) : BigInt(0));
+  const [localDebt, setLocalDebtState] = useState<bigint>(() => address ? getLocalCDPDebt(address) : BigInt(0));
   // Track collateral witness state for DEBT_UPDATE_VALIDITY (subsequent locks)
-  const [colWitness, setColWitness] = useState<{ balanceU64: bigint; blinding: bigint; commitment: bigint } | null>(null);
+  const [colWitness, setColWitnessState] = useState<{ balanceU64: bigint; blinding: bigint; commitment: bigint } | null>(() => address ? getCDPColWitness(address) : null);
   const [oracleStale, setOracleStale] = useState<boolean>(false);
   const [refreshingOracle, setRefreshingOracle] = useState(false);
   const [isMintingCDP, setIsMintingCDP] = useState(false);
+
+  // Wrappers that persist to localStorage
+  const setLocalCollateral = (valOrFn: bigint | ((prev: bigint) => bigint)) => {
+    setLocalCollateralState(prev => {
+      const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn;
+      if (address) setLocalCDPCollateral(address, next);
+      return next;
+    });
+  };
+  const setLocalDebt = (valOrFn: bigint | ((prev: bigint) => bigint)) => {
+    setLocalDebtState(prev => {
+      const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn;
+      if (address) setLocalCDPDebt(address, next);
+      return next;
+    });
+  };
+  const setColWitness = (state: { balanceU64: bigint; blinding: bigint; commitment: bigint } | null) => {
+    setColWitnessState(state);
+    if (address && state) setCDPColWitness(address, state);
+  };
+
+  // Reload from localStorage when address changes (e.g. wallet switch)
+  useEffect(() => {
+    if (address) {
+      setLocalCollateralState(getLocalCDPCollateral(address));
+      setLocalDebtState(getLocalCDPDebt(address));
+      setColWitnessState(getCDPColWitness(address));
+    }
+  }, [address]);
 
   const handleFaucetCDP = async () => {
     if (!account || !address) return;
@@ -482,6 +511,10 @@ export default function CDPPage() {
           toast.success('CDP closed', `tx: ${hash.slice(0, 20)}...`);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.ZERO_DEBT, status: 'verified', timestamp: Date.now(), txHash: hash });
           setHasCDP(false);
+          setLocalCollateral(BigInt(0));
+          setLocalDebt(BigInt(0));
+          setColWitness(null);
+          if (address) clearCDPState(address);
           break;
         }
       }

@@ -72,6 +72,94 @@ export function clearShieldedWitnessState(walletAddress: string): void {
   localStorage.removeItem(witKey(walletAddress));
 }
 
+// =========================================================================
+// CDP State (collateral + debt tracked locally for UI persistence)
+// =========================================================================
+
+const CDP_COL_KEY = 'obscura_cdp_collateral_';
+const CDP_DEBT_KEY = 'obscura_cdp_debt_';
+const CDP_COL_WITNESS_KEY = 'obscura_cdp_col_witness_';
+
+function cdpColKey(walletAddress: string): string {
+  return CDP_COL_KEY + walletAddress.toLowerCase();
+}
+
+function cdpDebtKey(walletAddress: string): string {
+  return CDP_DEBT_KEY + walletAddress.toLowerCase();
+}
+
+function cdpColWitKey(walletAddress: string): string {
+  return CDP_COL_WITNESS_KEY + walletAddress.toLowerCase();
+}
+
+/** Get locally tracked CDP collateral (u64 / 1e8 scale). */
+export function getLocalCDPCollateral(walletAddress: string): bigint {
+  try {
+    const raw = localStorage.getItem(cdpColKey(walletAddress));
+    if (!raw) return BigInt(0);
+    return BigInt(raw);
+  } catch {
+    return BigInt(0);
+  }
+}
+
+/** Set locally tracked CDP collateral. */
+export function setLocalCDPCollateral(walletAddress: string, amount: bigint): void {
+  localStorage.setItem(cdpColKey(walletAddress), amount.toString());
+}
+
+/** Get locally tracked CDP debt (u64 / 1e8 scale). */
+export function getLocalCDPDebt(walletAddress: string): bigint {
+  try {
+    const raw = localStorage.getItem(cdpDebtKey(walletAddress));
+    if (!raw) return BigInt(0);
+    return BigInt(raw);
+  } catch {
+    return BigInt(0);
+  }
+}
+
+/** Set locally tracked CDP debt. */
+export function setLocalCDPDebt(walletAddress: string, amount: bigint): void {
+  localStorage.setItem(cdpDebtKey(walletAddress), amount.toString());
+}
+
+/** Get collateral witness state for subsequent lock proofs. */
+export function getCDPColWitness(walletAddress: string): ShieldedWitnessState | null {
+  try {
+    const raw = localStorage.getItem(cdpColWitKey(walletAddress));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return {
+      balanceU64: BigInt(parsed.balanceU64),
+      blinding: BigInt(parsed.blinding),
+      commitment: BigInt(parsed.commitment),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Save collateral witness state after a successful lock. */
+export function setCDPColWitness(walletAddress: string, state: ShieldedWitnessState): void {
+  localStorage.setItem(cdpColWitKey(walletAddress), JSON.stringify({
+    balanceU64: state.balanceU64.toString(),
+    blinding: state.blinding.toString(),
+    commitment: state.commitment.toString(),
+  }));
+}
+
+/** Clear all CDP local state (after closing CDP). */
+export function clearCDPState(walletAddress: string): void {
+  localStorage.removeItem(cdpColKey(walletAddress));
+  localStorage.removeItem(cdpDebtKey(walletAddress));
+  localStorage.removeItem(cdpColWitKey(walletAddress));
+}
+
+// =========================================================================
+// Shielded Balance helpers
+// =========================================================================
+
 /** Add to the shielded balance (after a successful shield). */
 export function addShieldedBalance(walletAddress: string, amount: bigint): void {
   const current = getLocalShieldedBalance(walletAddress);
