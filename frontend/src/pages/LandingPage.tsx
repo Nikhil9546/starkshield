@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Shield, ShieldCheck, ShieldAlert, Lock, Unlock, Eye, Zap, Target,
   Link2, TrendingUp, Database, Cpu, Layers, Fingerprint, ScanLine,
@@ -657,6 +658,7 @@ const techStack = [
 
 // ─── MAIN ───
 export default function LandingPage() {
+  const navigate = useNavigate();
   const [bootDone, setBootDone] = useState(false);
   const [bootLine, setBootLine] = useState(0);
   const [scrollY, setScrollY] = useState(0);
@@ -1329,8 +1331,13 @@ export default function LandingPage() {
               <TypeWriter text="Stake BTC → encrypt balances with ElGamal → mint stablecoins via ZK proofs → verified on-chain by Garaga." speed={22} />
             </p>
             <div className="cta-row" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+<<<<<<< HEAD
               <a href="/stake"><button className="cta-btn">LAUNCH APP</button></a>
               <a href="/docs"><button className="cta-out">READ DOCS</button></a>
+=======
+              <button className="cta-btn" onClick={() => navigate('/stake')}>LAUNCH APP</button>
+              <button className="cta-out">READ DOCS</button>
+>>>>>>> 5249fea1b54c3c656564e1a4025dc26f2c79dbfa
             </div>
             <div style={{ marginTop: 56, display: "flex", gap: 44, flexWrap: "wrap", justifyContent: "center" }}>
               {[
@@ -1443,8 +1450,13 @@ export default function LandingPage() {
               Privacy is not a feature. It is a prerequisite for adoption at scale.
             </p>
             <div className="cta-row" style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+<<<<<<< HEAD
               <a href="/stake"><button className="cta-btn">START BUILDING</button></a>
               <a href="/docs"><button className="cta-out">VIEW DOCS</button></a>
+=======
+              <button className="cta-btn" onClick={() => navigate('/stake')}>START BUILDING</button>
+              <button className="cta-out">VIEW PRD</button>
+>>>>>>> 5249fea1b54c3c656564e1a4025dc26f2c79dbfa
             </div>
             <div style={{ marginTop: 56, fontFamily: "'Fira Code'", fontSize: 9, color: "rgba(255,255,255,.12)", letterSpacing: 2 }}>
               OBSCURA v1.5 — STARKNET — CAIRO — NOIR — GARAGA

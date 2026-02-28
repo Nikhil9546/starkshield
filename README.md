@@ -629,6 +629,3 @@ obscura/
 
 ---
 
-## License
-
-This project is built for educational and research purposes. See individual dependencies for their respective licenses.
