@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { useBalance } from '../hooks/useBalance';
 import { useProof } from '../hooks/useProof';
+import { useToast } from '../components/Toast';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
@@ -31,18 +32,14 @@ const pageStyles = `
     50% { transform: scale(1.1); opacity: 0.1; }
     100% { transform: scale(1); opacity: 0.3; }
   }
-  @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
   .page-glow {
     position: fixed;
     top: -200px;
     left: 50%;
     transform: translateX(-50%);
-    width: 800px;
+    width: 900px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(79,111,255,0.08) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(59,130,246,0.06) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -52,7 +49,7 @@ const pageStyles = `
     right: -200px;
     width: 600px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(0,229,255,0.05) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(6,182,212,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -62,13 +59,17 @@ const pageStyles = `
   .hero-ring {
     animation: pulse-ring 3s ease-in-out infinite;
   }
-  .gradient-text {
-    background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #818cf8 100%);
-    background-size: 200% 200%;
-    animation: gradient-shift 8s ease infinite;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .page-subtitle {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.7;
   }
 `;
 
@@ -76,34 +77,29 @@ export default function StakePage() {
   const { account, address, isKeyUnlocked, privacyKey } = useWallet();
   const { balances, loading: balancesLoading, refresh } = useBalance();
   const { progress, isProving, error: proofError, prove } = useProof();
+  const toast = useToast();
 
   // Deposit state
   const [amount, setAmount] = useState('');
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [txError, setTxError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Faucet state
   const [isMinting, setIsMinting] = useState(false);
-  const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
 
   // Shield state
   const [shieldAmount, setShieldAmount] = useState('');
-  const [shieldTxHash, setShieldTxHash] = useState<string | null>(null);
-  const [shieldTxError, setShieldTxError] = useState<string | null>(null);
   const [isShielding, setIsShielding] = useState(false);
 
   const handleFaucet = async () => {
     if (!account || !address) return;
     setIsMinting(true);
-    setFaucetMsg(null);
     try {
       const mintAmount = BigInt(100) * BigInt(10) ** BigInt(18); // 100 xyBTC
       const hash = await faucetMint(account, address, mintAmount);
-      setFaucetMsg(`Minted 100 xyBTC! tx: ${hash}`);
+      toast.success('Minted 100 xyBTC', `tx: ${hash.slice(0, 20)}...`);
       setTimeout(() => refresh(), 5000);
     } catch (err) {
-      setFaucetMsg(err instanceof Error ? err.message : 'Faucet failed');
+      toast.error('Faucet failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setIsMinting(false);
     }
@@ -112,18 +108,16 @@ export default function StakePage() {
   const handleDeposit = async () => {
     if (!account || !address || !amount) return;
 
-    setTxHash(null);
-    setTxError(null);
     setIsSubmitting(true);
 
     try {
       const amountBig = BigInt(Math.floor(parseFloat(amount) * 1e18));
       const hash = await deposit(account, amountBig);
-      setTxHash(hash);
+      toast.success('Deposit successful', `tx: ${hash.slice(0, 20)}...`);
       setAmount('');
       setTimeout(() => refresh(), 5000);
     } catch (err) {
-      setTxError(err instanceof Error ? err.message : 'Transaction failed');
+      toast.error('Deposit failed', err instanceof Error ? err.message : 'Transaction failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -132,8 +126,6 @@ export default function StakePage() {
   const handleShield = async () => {
     if (!account || !address || !shieldAmount || !privacyKey) return;
 
-    setShieldTxHash(null);
-    setShieldTxError(null);
     setIsShielding(true);
 
     try {
@@ -228,7 +220,7 @@ export default function StakePage() {
         nullifier,
       });
 
-      setShieldTxHash(hash);
+      toast.success('Shield successful', `tx: ${hash.slice(0, 20)}...`);
       setShieldAmount('');
 
       addShieldedBalance(address, amountBig);
@@ -254,7 +246,7 @@ export default function StakePage() {
     } catch (err) {
       console.error('[Shield] Error:', err);
       const msg = err instanceof Error ? err.message : String(err);
-      setShieldTxError(msg);
+      toast.error('Shield failed', msg);
       if (address) {
         addProofRecord(address, {
           id: crypto.randomUUID(),
@@ -279,8 +271,8 @@ export default function StakePage() {
             <div className="absolute inset-0 w-24 h-24 rounded-full bg-shield-500/15 blur-2xl hero-ring" />
             <ObscuraLogo size={80} glow animated />
           </div>
-          <h2 className="text-3xl font-bold gradient-text mb-3">Stake BTC</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to deposit BTC, stake via Endur, and shield into privacy-preserving sxyBTC.</p>
+          <h2 className="page-title gradient-text mb-3">Stake BTC</h2>
+          <p className="page-subtitle max-w-md">Connect your wallet to deposit BTC, stake via Endur, and shield into privacy-preserving sxyBTC.</p>
         </div>
       </>
     );
@@ -307,8 +299,8 @@ export default function StakePage() {
           <ObscuraLogo size={56} glow animated />
         </div>
         <div>
-          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Stake BTC</h2>
-          <p className="text-gray-400">
+          <h2 className="page-title gradient-text tracking-tight mb-1">Stake BTC</h2>
+          <p className="page-subtitle">
             Deposit BTC into the ShieldedVault. Stake via Endur and wrap into privacy-preserving sxyBTC.
           </p>
         </div>
@@ -379,9 +371,6 @@ export default function StakePage() {
           ) : 'Get Test Tokens'}
         </button>
       </div>
-      {faucetMsg && (
-        <p className="text-xs text-gray-400 break-all px-1 -mt-4">{faucetMsg}</p>
-      )}
 
       {/* Deposit Section */}
       <div className="card space-y-4">
@@ -414,17 +403,6 @@ export default function StakePage() {
             ) : 'Deposit & Stake'}
           </button>
         </div>
-
-        {txHash && (
-          <div className="tx-success">
-            <span className="text-emerald-400 font-medium">Transaction submitted </span>
-            <span className="text-gray-400 font-mono text-xs break-all">{txHash}</span>
-          </div>
-        )}
-
-        {txError && (
-          <div className="tx-error">{txError}</div>
-        )}
       </div>
 
       {/* Shield Section */}
@@ -468,17 +446,6 @@ export default function StakePage() {
             </div>
 
             <ProofProgress progress={progress} error={proofError} />
-
-            {shieldTxHash && (
-              <div className="tx-success">
-                <span className="text-emerald-400 font-medium">Shield transaction submitted </span>
-                <span className="text-gray-400 font-mono text-xs break-all">{shieldTxHash}</span>
-              </div>
-            )}
-
-            {shieldTxError && (
-              <div className="tx-error">{shieldTxError}</div>
-            )}
           </>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { useBalance } from '../hooks/useBalance';
 import { useProof } from '../hooks/useProof';
+import { useToast } from '../components/Toast';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
@@ -32,10 +33,6 @@ const pageStyles = `
     50% { transform: scale(1.1); opacity: 0.1; }
     100% { transform: scale(1); opacity: 0.3; }
   }
-  @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
   @keyframes orbit {
     0% { transform: rotate(0deg) translateX(24px) rotate(0deg); }
     100% { transform: rotate(360deg) translateX(24px) rotate(-360deg); }
@@ -45,9 +42,9 @@ const pageStyles = `
     top: -200px;
     left: 50%;
     transform: translateX(-50%);
-    width: 800px;
+    width: 900px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(139,92,246,0.08) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(139,92,246,0.06) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -57,7 +54,7 @@ const pageStyles = `
     left: -200px;
     width: 600px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(79,111,255,0.05) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(59,130,246,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -67,6 +64,18 @@ const pageStyles = `
   .hero-ring {
     animation: pulse-ring 3s ease-in-out infinite;
   }
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .page-subtitle {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.7;
+  }
   .gradient-text {
     background: linear-gradient(135deg, #fff 0%, #c4b5fd 50%, #a78bfa 100%);
     background-size: 200% 200%;
@@ -74,6 +83,10 @@ const pageStyles = `
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
   .orbit-dot {
     position: absolute;
@@ -83,6 +96,58 @@ const pageStyles = `
     border-radius: 50%;
     animation: orbit 8s linear infinite;
     box-shadow: 0 0 8px #8b5cf6;
+  }
+  .action-tab {
+    position: relative;
+    overflow: hidden;
+    padding: 10px 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .action-tab::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(139,92,246,0.08), transparent);
+    transition: left 0.4s;
+    pointer-events: none;
+  }
+  .action-tab:hover::before {
+    left: 100%;
+  }
+  .action-tab-active {
+    background: rgba(139,92,246,0.1);
+    border: 1px solid rgba(139,92,246,0.25);
+    color: #a78bfa;
+    box-shadow: 0 0 12px rgba(139,92,246,0.1);
+  }
+  .action-tab-inactive {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.4);
+  }
+  .action-tab-inactive:hover {
+    background: rgba(139,92,246,0.05);
+    border-color: rgba(139,92,246,0.15);
+    color: rgba(255,255,255,0.7);
+  }
+  .action-tab-danger {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.2);
+    color: #f87171;
   }
 `;
 
@@ -131,10 +196,9 @@ export default function CDPPage() {
   const { account, address } = useWallet();
   const { balances, refresh } = useBalance();
   const { progress, isProving, error: proofError, prove } = useProof();
+  const toast = useToast();
   const [action, setAction] = useState<CDPAction>('lock');
   const [amount, setAmount] = useState('');
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [txError, setTxError] = useState<string | null>(null);
   const [hasCDP, setHasCDP] = useState<boolean | null>(null);
   // On devnet, on-chain reads may return 0 due to RPC quirks — track locally.
   // On testnet/mainnet, on-chain state works correctly after proof-verified tx.
@@ -145,19 +209,17 @@ export default function CDPPage() {
   const [oracleStale, setOracleStale] = useState<boolean>(false);
   const [refreshingOracle, setRefreshingOracle] = useState(false);
   const [isMintingCDP, setIsMintingCDP] = useState(false);
-  const [faucetMsg, setFaucetMsg] = useState<string | null>(null);
 
   const handleFaucetCDP = async () => {
     if (!account || !address) return;
     setIsMintingCDP(true);
-    setFaucetMsg(null);
     try {
       const mintAmount = BigInt(100) * BigInt(10) ** BigInt(18);
       const hash = await faucetMint(account, address, mintAmount);
-      setFaucetMsg(`Minted 100 xyBTC! tx: ${hash.substring(0, 20)}...`);
+      toast.success('Minted 100 xyBTC', `tx: ${hash.slice(0, 20)}...`);
       setTimeout(() => refresh(), 5000);
     } catch (err) {
-      setFaucetMsg(err instanceof Error ? err.message : 'Faucet failed');
+      toast.error('Faucet failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setIsMintingCDP(false);
     }
@@ -187,12 +249,12 @@ export default function CDPPage() {
   const handleRefreshOracle = async () => {
     if (!account) return;
     setRefreshingOracle(true);
-    setTxError(null);
     try {
       await refreshOracle(account);
       setOracleStale(false);
+      toast.success('Oracle refreshed');
     } catch (err) {
-      setTxError(err instanceof Error ? err.message : 'Failed to refresh oracle');
+      toast.error('Failed to refresh oracle', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setRefreshingOracle(false);
     }
@@ -200,14 +262,13 @@ export default function CDPPage() {
 
   const handleOpenCDP = async () => {
     if (!account) return;
-    setTxError(null);
     try {
       const hash = await openCDP(account);
-      setTxHash(hash);
+      toast.success('CDP opened', `tx: ${hash.slice(0, 20)}...`);
       setHasCDP(true);
     } catch (err) {
       console.error('[CDP] open_cdp error:', err);
-      setTxError(err instanceof Error ? err.message : 'Failed to open CDP');
+      toast.error('Failed to open CDP', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
@@ -222,8 +283,6 @@ export default function CDPPage() {
     if (!account || !address) return;
     // Close CDP doesn't need an amount; all other actions do
     if (action !== 'close' && !amount) return;
-    setTxHash(null);
-    setTxError(null);
 
     try {
       // Contract amount at 1e18, circuit witness at 1e8 (these are independent)
@@ -299,7 +358,7 @@ export default function CDPPage() {
             publicInputs: lockProof.publicInputs,
             nullifier,
           });
-          setTxHash(hash);
+          toast.success('Collateral locked', `tx: ${hash.slice(0, 20)}...`);
           const prevU64 = colWitness?.balanceU64 ?? BigInt(0);
           setLocalCollateral(prev => prev + amountU64);
           setColWitness({ balanceU64: prevU64 + amountU64, blinding: lockBlinding, commitment: lockCommitment });
@@ -358,7 +417,7 @@ export default function CDPPage() {
             publicInputs: proof.publicInputs,
             nullifier,
           });
-          setTxHash(hash);
+          toast.success('sUSD minted', `tx: ${hash.slice(0, 20)}...`);
           setLocalDebt(prev => prev + debtU64);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.COLLATERAL_RATIO, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
@@ -401,7 +460,7 @@ export default function CDPPage() {
             publicInputs: proof.publicInputs,
             nullifier,
           });
-          setTxHash(hash);
+          toast.success('Debt repaid', `tx: ${hash.slice(0, 20)}...`);
           setLocalDebt(newDebtU64);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.DEBT_UPDATE_VALIDITY, status: 'verified', timestamp: Date.now(), txHash: hash });
           break;
@@ -420,7 +479,7 @@ export default function CDPPage() {
             publicInputs: proof.publicInputs,
             nullifier,
           });
-          setTxHash(hash);
+          toast.success('CDP closed', `tx: ${hash.slice(0, 20)}...`);
           addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.ZERO_DEBT, status: 'verified', timestamp: Date.now(), txHash: hash });
           setHasCDP(false);
           break;
@@ -431,7 +490,7 @@ export default function CDPPage() {
       await refresh();
     } catch (err) {
       console.error('[CDP] Error:', err);
-      setTxError(err instanceof Error ? err.message : String(err));
+      toast.error('Action failed', err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -454,8 +513,8 @@ export default function CDPPage() {
             <div className="absolute inset-0 w-24 h-24 rounded-full bg-purple-500/15 blur-2xl hero-ring" />
             <ObscuraLogo size={80} glow animated color="#8b5cf6" />
           </div>
-          <h2 className="text-3xl font-bold gradient-text mb-3">Shielded CDP</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to open a Collateralized Debt Position and mint sUSD.</p>
+          <h2 className="page-title gradient-text mb-3">Shielded CDP</h2>
+          <p className="page-subtitle max-w-md">Connect your wallet to open a Collateralized Debt Position and mint sUSD.</p>
         </div>
       </>
     );
@@ -474,8 +533,8 @@ export default function CDPPage() {
           <ObscuraLogo size={56} glow animated color="#8b5cf6" />
         </div>
         <div>
-          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Shielded CDP</h2>
-          <p className="text-gray-400">
+          <h2 className="page-title gradient-text tracking-tight mb-1">Shielded CDP</h2>
+          <p className="page-subtitle">
             Lock sxyBTC as collateral and mint sUSD stablecoin. Minimum collateral ratio: 200%.
           </p>
         </div>
@@ -570,25 +629,22 @@ export default function CDPPage() {
           </button>
         </div>
       )}
-      {faucetMsg && (
-        <p className="text-xs text-gray-400 break-all px-1 -mt-4">{faucetMsg}</p>
-      )}
 
       {/* CDP Actions Panel */}
       {hasCDP !== false && (
         <div className="card space-y-5">
           {/* Action Tabs */}
-          <div className="flex gap-1.5 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06]">
+          <div className="flex gap-2">
             {(['lock', 'mint', 'repay', 'close'] as CDPAction[]).map((a) => (
               <button
                 key={a}
                 onClick={() => setAction(a)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex-1 justify-center ${
+                className={`action-tab ${
                   action === a
                     ? a === 'close'
-                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                      : 'bg-shield-600/15 text-shield-300 border border-shield-500/20'
-                    : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                      ? 'action-tab-danger'
+                      : 'action-tab-active'
+                    : 'action-tab-inactive'
                 }`}
               >
                 {ACTION_META[a].icon}
@@ -647,17 +703,6 @@ export default function CDPPage() {
           )}
 
           <ProofProgress progress={progress} error={proofError} />
-
-          {txHash && (
-            <div className="tx-success">
-              <span className="text-emerald-400 font-medium">Transaction submitted </span>
-              <span className="text-gray-400 font-mono text-xs break-all">{txHash}</span>
-            </div>
-          )}
-
-          {txError && (
-            <div className="tx-error">{txError}</div>
-          )}
         </div>
       )}
       </div>

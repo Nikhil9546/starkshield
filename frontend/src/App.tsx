@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { WalletProvider } from './hooks/useWallet';
+import { ToastProvider } from './components/Toast';
 import WalletConnect from './components/WalletConnect';
 import ObscuraLogo, { logoStyles } from './components/ObscuraLogo';
 import LandingPage from './pages/LandingPage';
@@ -18,17 +19,79 @@ const navItems = [
   { to: '/settings', label: 'Settings', icon: '%' },
 ];
 
+const appStyles = `
+  @keyframes scanD { 0% { top: -1px } 100% { top: 100vh } }
+  .scan-beam {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,.06), transparent);
+    animation: scanD 8s linear infinite;
+    pointer-events: none;
+    z-index: 998;
+  }
+  .nav-item {
+    position: relative;
+    overflow: hidden;
+    padding: 8px 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  }
+  .nav-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,.08), transparent);
+    transition: left 0.4s;
+    pointer-events: none;
+  }
+  .nav-item:hover::before {
+    left: 100%;
+  }
+  .nav-item-active {
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.25);
+    color: #3b82f6;
+    box-shadow: 0 0 12px rgba(59,130,246,0.1);
+  }
+  .nav-item-inactive {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.45);
+  }
+  .nav-item-inactive:hover {
+    background: rgba(59,130,246,0.05);
+    border-color: rgba(59,130,246,0.15);
+    color: rgba(255,255,255,0.75);
+  }
+`;
+
 function AppLayout() {
   return (
     <div className="relative min-h-screen flex flex-col z-10">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;800;900&display=swap');
-        ${logoStyles}
-      `}</style>
-      {/* Top ambient glow */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-glow-shield pointer-events-none z-0" />
+      <style>{appStyles}{logoStyles}</style>
 
-      <header className="relative z-20 border-b border-white/[0.06] backdrop-blur-xl bg-[#050a18]/80">
+      {/* Scan beam effect */}
+      <div className="scan-beam" />
+
+      {/* Top ambient glow */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] pointer-events-none z-0"
+           style={{ background: 'radial-gradient(ellipse at center, rgba(59,130,246,0.06) 0%, transparent 70%)' }} />
+
+      <header className="relative z-20 backdrop-blur-xl" style={{
+        background: 'rgba(4,6,11,0.92)',
+        borderBottom: '1px solid rgba(59,130,246,0.08)',
+      }}>
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-10">
             {/* Logo */}
@@ -37,20 +100,17 @@ function AppLayout() {
                 <ObscuraLogo size={32} glow animated />
               </div>
               <span style={{ fontFamily: "'Orbitron', sans-serif", fontWeight: 800, fontSize: 14, color: "#fff", letterSpacing: 3 }}>OBSCURA</span>
+              <span style={{ fontSize: 9, color: 'rgba(59,130,246,0.4)', fontFamily: "'Fira Code', monospace", letterSpacing: 1 }}>v1.5</span>
             </NavLink>
 
             {/* Navigation */}
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-2">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      isActive
-                        ? 'bg-shield-600/15 text-shield-300 shadow-inner'
-                        : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]'
-                    }`
+                    `nav-item ${isActive ? 'nav-item-active' : 'nav-item-inactive'}`
                   }
                 >
                   {item.label}
@@ -72,14 +132,14 @@ function AppLayout() {
         </Routes>
       </main>
 
-      <footer className="relative z-10 border-t border-white/[0.04] px-6 py-5">
+      <footer className="relative z-10 px-6 py-5" style={{ borderTop: '1px solid rgba(59,130,246,0.06)' }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <span className="text-xs text-gray-500">
-            Obscura v1.5 -- Privacy-Preserving BTC DeFi on Starknet
+          <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: 1 }}>
+            OBSCURA v1.5 — PRIVACY-PRESERVING BTC DEFI ON STARKNET
           </span>
           <div className="flex items-center gap-4">
-            <span className="badge-shield text-[10px]">Sepolia Testnet</span>
-            <span className="text-xs text-gray-600">Powered by Noir + Garaga</span>
+            <span className="badge-shield">Sepolia Testnet</span>
+            <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: 1 }}>NOIR + GARAGA</span>
           </div>
         </div>
       </footer>
@@ -102,7 +162,9 @@ export default function App() {
 
   return (
     <WalletProvider>
-      <AppLayout />
+      <ToastProvider>
+        <AppLayout />
+      </ToastProvider>
     </WalletProvider>
   );
 }

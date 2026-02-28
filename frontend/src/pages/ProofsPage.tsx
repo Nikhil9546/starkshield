@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '../hooks/useWallet';
+import { useToast } from '../components/Toast';
 import SolvencyCard from '../components/SolvencyCard';
 import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
 import { CircuitType, preloadCircuits } from '../lib/proofs/circuits';
@@ -18,10 +19,6 @@ const pageStyles = `
     50% { transform: scale(1.1); opacity: 0.1; }
     100% { transform: scale(1); opacity: 0.3; }
   }
-  @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
   @keyframes scan {
     0% { transform: translateY(-100%); }
     100% { transform: translateY(100%); }
@@ -31,9 +28,9 @@ const pageStyles = `
     top: -200px;
     left: 50%;
     transform: translateX(-50%);
-    width: 800px;
+    width: 900px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(16,185,129,0.06) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(16,185,129,0.05) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -43,7 +40,7 @@ const pageStyles = `
     left: -200px;
     width: 600px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(79,111,255,0.05) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(59,130,246,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -53,6 +50,18 @@ const pageStyles = `
   .hero-ring {
     animation: pulse-ring 3s ease-in-out infinite;
   }
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .page-subtitle {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.7;
+  }
   .gradient-text {
     background: linear-gradient(135deg, #fff 0%, #6ee7b7 50%, #34d399 100%);
     background-size: 200% 200%;
@@ -60,6 +69,10 @@ const pageStyles = `
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
   .scan-line {
     position: absolute;
@@ -73,6 +86,7 @@ const pageStyles = `
 
 export default function ProofsPage() {
   const { account, address } = useWallet();
+  const toast = useToast();
   const [preloading, setPreloading] = useState(false);
   const [preloaded, setPreloaded] = useState(false);
 
@@ -92,7 +106,6 @@ export default function ProofsPage() {
   const [proofHistory, setProofHistory] = useState<ProofRecord[]>([]);
   const [solvencyLoading, setSolvencyLoading] = useState(false);
   const [submittingSolvency, setSubmittingSolvency] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchSolvencyData = useCallback(async () => {
     if (!account) return;
@@ -128,7 +141,6 @@ export default function ProofsPage() {
   const handleSubmitSolvency = useCallback(async () => {
     if (!account) return;
     setSubmittingSolvency(true);
-    setSubmitResult(null);
     setSolvencyStage('');
     try {
       setSolvencyStage('Generating vault solvency proof...');
@@ -138,20 +150,17 @@ export default function ProofsPage() {
       const cdpTx = await submitCdpSafetyProof(account, (p) => setSolvencyStage(p.message));
 
       setSolvencyStage('');
-      setSubmitResult({
-        success: true,
-        message: `Proofs submitted! Vault tx: ${vaultTx.slice(0, 14)}... CDP tx: ${cdpTx.slice(0, 14)}...`,
-      });
+      toast.success('Solvency proofs submitted', `Vault: ${vaultTx.slice(0, 10)}... CDP: ${cdpTx.slice(0, 10)}...`);
       // Refresh solvency data after submission
       await fetchSolvencyData();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      setSubmitResult({ success: false, message: message.slice(0, 200) });
+      toast.error('Proof submission failed', message.slice(0, 150));
       setSolvencyStage('');
     } finally {
       setSubmittingSolvency(false);
     }
-  }, [account, fetchSolvencyData]);
+  }, [account, fetchSolvencyData, toast]);
 
   // Fetch solvency data on mount
   useEffect(() => {
@@ -176,8 +185,9 @@ export default function ProofsPage() {
         CircuitType.COLLATERAL_RATIO,
       ]);
       setPreloaded(true);
+      toast.success('Circuits preloaded', 'ZK circuits are ready for faster proof generation.');
     } catch {
-      // Circuit files may not be available in dev mode
+      toast.warning('Circuit preload skipped', 'Circuits may not be available in dev mode.');
     } finally {
       setPreloading(false);
     }
@@ -223,8 +233,8 @@ export default function ProofsPage() {
             <div className="absolute inset-0 w-24 h-24 rounded-full bg-emerald-500/15 blur-2xl hero-ring" />
             <ObscuraLogo size={80} glow animated color="#10b981" />
           </div>
-          <h2 className="text-3xl font-bold gradient-text mb-3">Proofs Dashboard</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to view proof history and protocol solvency.</p>
+          <h2 className="page-title gradient-text mb-3">Proofs Dashboard</h2>
+          <p className="page-subtitle max-w-md">Connect your wallet to view proof history and protocol solvency.</p>
         </div>
       </>
     );
@@ -243,8 +253,8 @@ export default function ProofsPage() {
           <ObscuraLogo size={56} glow animated color="#10b981" />
         </div>
         <div>
-          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Proofs Dashboard</h2>
-          <p className="text-gray-400">
+          <h2 className="page-title gradient-text tracking-tight mb-1">Proofs Dashboard</h2>
+          <p className="page-subtitle">
             Monitor ZK proof generation, verification status, and protocol solvency.
           </p>
         </div>
@@ -327,12 +337,6 @@ export default function ProofsPage() {
           {solvencyLoading ? 'Refreshing...' : 'Refresh Solvency Data'}
         </button>
       </div>
-
-      {submitResult && (
-        <div className={submitResult.success ? 'tx-success' : 'tx-error'}>
-          {submitResult.message}
-        </div>
-      )}
 
       {/* Circuit Preloading */}
       <div className="card">

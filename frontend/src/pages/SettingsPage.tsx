@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useWallet } from '../hooks/useWallet';
+import { useToast } from '../components/Toast';
 import { generateKeyPair } from '../lib/privacy/keygen';
 import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
 import {
@@ -22,10 +23,6 @@ const pageStyles = `
     50% { transform: scale(1.1); opacity: 0.1; }
     100% { transform: scale(1); opacity: 0.3; }
   }
-  @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
   @keyframes key-glow {
     0%, 100% { filter: drop-shadow(0 0 4px rgba(251,191,36,0.3)); }
     50% { filter: drop-shadow(0 0 12px rgba(251,191,36,0.5)); }
@@ -35,9 +32,9 @@ const pageStyles = `
     top: -200px;
     left: 50%;
     transform: translateX(-50%);
-    width: 800px;
+    width: 900px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(251,191,36,0.05) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(245,158,11,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -47,7 +44,7 @@ const pageStyles = `
     right: -200px;
     width: 600px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(79,111,255,0.05) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(59,130,246,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -57,6 +54,18 @@ const pageStyles = `
   .hero-ring {
     animation: pulse-ring 3s ease-in-out infinite;
   }
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .page-subtitle {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.7;
+  }
   .gradient-text {
     background: linear-gradient(135deg, #fff 0%, #fde68a 50%, #fbbf24 100%);
     background-size: 200% 200%;
@@ -65,6 +74,10 @@ const pageStyles = `
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
   .key-icon {
     animation: key-glow 3s ease-in-out infinite;
   }
@@ -72,9 +85,8 @@ const pageStyles = `
 
 export default function SettingsPage() {
   const { address, setPrivacyKey } = useWallet();
+  const toast = useToast();
   const [password, setPassword] = useState('');
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [publicKeyDisplay, setPublicKeyDisplay] = useState<string | null>(null);
 
@@ -85,12 +97,10 @@ export default function SettingsPage() {
 
   const handleGenerate = async () => {
     if (!address || !password) return;
-    setError(null);
-    setStatus(null);
 
     try {
       if (password.length < 8) {
-        setError('Password must be at least 8 characters');
+        toast.warning('Password must be at least 8 characters');
         return;
       }
 
@@ -101,16 +111,14 @@ export default function SettingsPage() {
         `(${keyPair.publicKey.x.toString(16).slice(0, 16)}...)`
       );
       setPrivacyKey(keyPair.privateKey);
-      setStatus('Key generated and unlocked. Shielded balances will now decrypt automatically.');
+      toast.success('Key generated and unlocked', 'Shielded balances will now decrypt automatically.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Key generation failed');
+      toast.error('Key generation failed', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
   const handleLoad = async () => {
     if (!address || !password) return;
-    setError(null);
-    setStatus(null);
 
     try {
       const kp = await loadKeyPair(address, password);
@@ -119,22 +127,21 @@ export default function SettingsPage() {
           `(${kp.publicKey.x.toString(16).slice(0, 16)}...)`
         );
         setPrivacyKey(kp.privateKey);
-        setStatus('Key unlocked. Shielded balances will now decrypt automatically.');
+        toast.success('Key unlocked', 'Shielded balances will now decrypt automatically.');
       } else {
-        setError('Wrong password or no key found.');
+        toast.error('Failed to unlock key', 'Wrong password or no key found.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load key');
+      toast.error('Failed to load key', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
   const handleExport = () => {
     if (!address) return;
-    setError(null);
 
     const backup = exportKeyBackup(address);
     if (!backup) {
-      setError('No key to export');
+      toast.error('No key to export');
       return;
     }
 
@@ -145,11 +152,10 @@ export default function SettingsPage() {
     a.download = `obscura-key-${address.slice(0, 8)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setStatus('Backup exported.');
+    toast.success('Backup exported', 'Key backup file downloaded.');
   };
 
   const handleImport = () => {
-    setError(null);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
@@ -161,9 +167,9 @@ export default function SettingsPage() {
         const text = await file.text();
         importKeyBackup(text);
         setHasKey(true);
-        setStatus('Backup imported successfully.');
+        toast.success('Backup imported', 'Key backup restored successfully.');
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Import failed');
+        toast.error('Import failed', err instanceof Error ? err.message : 'Unknown error');
       }
     };
     input.click();
@@ -178,7 +184,7 @@ export default function SettingsPage() {
     setHasKey(false);
     setPublicKeyDisplay(null);
     setPrivacyKey(null);
-    setStatus('Key deleted. Shielded balances will show as encrypted.');
+    toast.warning('Key deleted', 'Shielded balances will show as encrypted.');
   };
 
   if (!address) {
@@ -192,8 +198,8 @@ export default function SettingsPage() {
             <div className="absolute inset-0 w-24 h-24 rounded-full bg-amber-500/15 blur-2xl hero-ring" />
             <ObscuraLogo size={80} glow animated color="#f59e0b" />
           </div>
-          <h2 className="text-3xl font-bold gradient-text mb-3">Settings</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to manage encryption keys and privacy settings.</p>
+          <h2 className="page-title gradient-text mb-3">Settings</h2>
+          <p className="page-subtitle max-w-md">Connect your wallet to manage encryption keys and privacy settings.</p>
         </div>
       </>
     );
@@ -212,8 +218,8 @@ export default function SettingsPage() {
           <ObscuraLogo size={56} glow animated color="#f59e0b" />
         </div>
         <div>
-          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Settings</h2>
-          <p className="text-gray-400">
+          <h2 className="page-title gradient-text tracking-tight mb-1">Settings</h2>
+          <p className="page-subtitle">
             Manage your ElGamal encryption keys for shielded balances.
           </p>
         </div>
@@ -323,13 +329,6 @@ export default function SettingsPage() {
             </button>
           )}
         </div>
-
-        {status && (
-          <div className="tx-success">{status}</div>
-        )}
-        {error && (
-          <div className="tx-error">{error}</div>
-        )}
       </div>
 
       {/* About Privacy Keys */}

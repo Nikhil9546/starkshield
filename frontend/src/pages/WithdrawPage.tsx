@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import { useBalance } from '../hooks/useBalance';
 import { useProof } from '../hooks/useProof';
+import { useToast } from '../components/Toast';
 import BalanceDisplay from '../components/BalanceDisplay';
 import ProofProgress from '../components/ProofProgress';
 import ObscuraLogo, { logoStyles } from '../components/ObscuraLogo';
@@ -31,10 +32,6 @@ const pageStyles = `
     50% { transform: scale(1.1); opacity: 0.1; }
     100% { transform: scale(1); opacity: 0.3; }
   }
-  @keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
   @keyframes flow-up {
     0% { transform: translateY(10px); opacity: 0; }
     50% { opacity: 1; }
@@ -45,9 +42,9 @@ const pageStyles = `
     top: -200px;
     left: 50%;
     transform: translateX(-50%);
-    width: 800px;
+    width: 900px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(0,229,255,0.06) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(6,182,212,0.05) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -57,7 +54,7 @@ const pageStyles = `
     right: -200px;
     width: 600px;
     height: 600px;
-    background: radial-gradient(ellipse at center, rgba(79,111,255,0.05) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(59,130,246,0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
   }
@@ -67,6 +64,18 @@ const pageStyles = `
   .hero-ring {
     animation: pulse-ring 3s ease-in-out infinite;
   }
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .page-subtitle {
+    font-family: 'Fira Code', monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.7;
+  }
   .gradient-text {
     background: linear-gradient(135deg, #fff 0%, #a5f3fc 50%, #22d3ee 100%);
     background-size: 200% 200%;
@@ -74,6 +83,10 @@ const pageStyles = `
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
   .flow-particle {
     position: absolute;
@@ -90,33 +103,28 @@ export default function WithdrawPage() {
   const { account, address, isKeyUnlocked, privacyKey } = useWallet();
   const { balances, loading: balancesLoading, refresh } = useBalance();
   const { progress, isProving, error: proofError, prove } = useProof();
+  const toast = useToast();
 
   // Withdraw state
   const [amount, setAmount] = useState('');
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [txError, setTxError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Unshield state
   const [unshieldAmount, setUnshieldAmount] = useState('');
-  const [unshieldTxHash, setUnshieldTxHash] = useState<string | null>(null);
-  const [unshieldTxError, setUnshieldTxError] = useState<string | null>(null);
   const [isUnshielding, setIsUnshielding] = useState(false);
 
   const handleWithdraw = async () => {
     if (!account || !address || !amount) return;
-    setTxHash(null);
-    setTxError(null);
     setIsSubmitting(true);
 
     try {
       const amountBig = BigInt(Math.floor(parseFloat(amount) * 1e18));
       const hash = await withdraw(account, amountBig);
-      setTxHash(hash);
+      toast.success('Withdrawal successful', `tx: ${hash.slice(0, 20)}...`);
       setAmount('');
       setTimeout(() => refresh(), 1000);
     } catch (err) {
-      setTxError(err instanceof Error ? err.message : 'Transaction failed');
+      toast.error('Withdrawal failed', err instanceof Error ? err.message : 'Transaction failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -125,8 +133,6 @@ export default function WithdrawPage() {
   const handleUnshield = async () => {
     if (!account || !address || !unshieldAmount || !privacyKey) return;
 
-    setUnshieldTxHash(null);
-    setUnshieldTxError(null);
     setIsUnshielding(true);
 
     try {
@@ -191,7 +197,7 @@ export default function WithdrawPage() {
         nullifier,
       });
 
-      setUnshieldTxHash(hash);
+      toast.success('Unshield successful', `tx: ${hash.slice(0, 20)}...`);
       setUnshieldAmount('');
 
       // Update local shielded balance tracker
@@ -218,7 +224,7 @@ export default function WithdrawPage() {
 
       setTimeout(() => refresh(), 1000);
     } catch (err) {
-      setUnshieldTxError(err instanceof Error ? err.message : 'Unshield transaction failed');
+      toast.error('Unshield failed', err instanceof Error ? err.message : 'Transaction failed');
       if (address) {
         addProofRecord(address, {
           id: crypto.randomUUID(),
@@ -243,8 +249,8 @@ export default function WithdrawPage() {
             <div className="absolute inset-0 w-24 h-24 rounded-full bg-cyan-500/15 blur-2xl hero-ring" />
             <ObscuraLogo size={80} glow animated color="#06b6d4" />
           </div>
-          <h2 className="text-3xl font-bold gradient-text mb-3">Withdraw</h2>
-          <p className="text-gray-400 max-w-md leading-relaxed">Connect your wallet to withdraw funds from the vault.</p>
+          <h2 className="page-title gradient-text mb-3">Withdraw</h2>
+          <p className="page-subtitle max-w-md">Connect your wallet to withdraw funds from the vault.</p>
         </div>
       </>
     );
@@ -271,8 +277,8 @@ export default function WithdrawPage() {
           <ObscuraLogo size={56} glow animated color="#06b6d4" />
         </div>
         <div>
-          <h2 className="text-3xl font-bold gradient-text tracking-tight mb-1">Withdraw</h2>
-          <p className="text-gray-400">
+          <h2 className="page-title gradient-text tracking-tight mb-1">Withdraw</h2>
+          <p className="page-subtitle">
             Withdraw public xyBTC from the vault back to your wallet, or unshield encrypted sxyBTC first.
           </p>
         </div>
@@ -351,17 +357,6 @@ export default function WithdrawPage() {
             </div>
 
             <ProofProgress progress={progress} error={proofError} />
-
-            {unshieldTxHash && (
-              <div className="tx-success">
-                <span className="text-emerald-400 font-medium">Unshield submitted </span>
-                <span className="text-gray-400 font-mono text-xs break-all">{unshieldTxHash}</span>
-              </div>
-            )}
-
-            {unshieldTxError && (
-              <div className="tx-error">{unshieldTxError}</div>
-            )}
           </>
         )}
       </div>
@@ -398,17 +393,6 @@ export default function WithdrawPage() {
             ) : 'Withdraw'}
           </button>
         </div>
-
-        {txHash && (
-          <div className="tx-success">
-            <span className="text-emerald-400 font-medium">Transaction submitted </span>
-            <span className="text-gray-400 font-mono text-xs break-all">{txHash}</span>
-          </div>
-        )}
-
-        {txError && (
-          <div className="tx-error">{txError}</div>
-        )}
       </div>
 
       <button
