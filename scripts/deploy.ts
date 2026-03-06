@@ -251,18 +251,25 @@ async function main() {
   console.log(`    address: ${deployed['ShieldedCDP']}`);
 
   // 3f: Deploy SolvencyProver
+  // Constructor: (owner, verifier, authorized_prover)
+  // The authorized_prover is set to the deployer by default.
+  // To authorize other wallets (e.g. frontend users), call set_prover() afterward:
+  //   sncast invoke --function set_prover --calldata <user_wallet_address>
   console.log('\n  Deploying SolvencyProver...');
   const solvencyOutput = run(
     `sncast ${G} deploy ${U} --class-hash ${classHashes['SolvencyProver']} --constructor-calldata ${accountAddr} ${verifierAddress} ${accountAddr}`,
   );
   deployed['SolvencyProver'] = extractAddress(solvencyOutput);
   console.log(`    address: ${deployed['SolvencyProver']}`);
+  console.log(`    NOTE: authorized_prover = deployer (${accountAddr.slice(0, 14)}...)`);
+  console.log(`    To authorize other wallets, call set_prover on the SolvencyProver.`);
 
   // Step 4: Write addresses to .env
   console.log('\n--- Updating .env ---');
   let envContent = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, 'utf-8') : '';
 
   const replacements: Record<string, string> = {
+    'SNCAST_ACCOUNT_NAME': accountName,
     'SHIELDED_VAULT_ADDRESS': deployed['ShieldedVault'],
     'SHIELDED_CDP_ADDRESS': deployed['ShieldedCDP'],
     'PROOF_VERIFIER_ADDRESS': verifierAddress,

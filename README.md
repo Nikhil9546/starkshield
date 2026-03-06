@@ -17,6 +17,7 @@ Obscura lets you stake BTC, borrow stablecoins, and prove solvency — all witho
 - [Smart Contracts](#smart-contracts)
 - [ZK Circuits](#zk-circuits)
 - [Frontend](#frontend)
+- [AI Assistant](#ai-assistant)
 - [Getting Started](#getting-started)
 - [Deployment](#deployment)
 - [Testing](#testing)
@@ -88,41 +89,50 @@ Obscura solves this by making balances encrypted and operations provable without
 ## Architecture
 
 ```
-                          +-----------------------+
-                          |     Frontend (React)  |
-                          |  Vite + TypeScript     |
-                          +----------+------------+
-                                     |
-                    +----------------+------------------+
-                    |                |                   |
-             +------+------+  +-----+-------+  +-------+--------+
-             | Privacy      |  | Proof        |  | Contract       |
-             | Engine       |  | Pipeline     |  | Interaction    |
-             | (ElGamal)    |  | (Noir + BB)  |  | (starknet.js)  |
-             +------+------+  +-----+-------+  +-------+--------+
-                    |                |                   |
-                    v                v                   v
-              +-----------+  +-----------+        +----------+
-              | Key Mgmt  |  | Garaga    |        | Starknet |
-              | (Browser  |  | Calldata  |        | Sepolia  |
-              |  Storage) |  | Encoding  |        |          |
-              +-----------+  +-----------+        +-----+----+
+                     +--------------------------+
+                     |     Frontend (React)     |
+                     |   Vite + TypeScript      |
+                     +-----+----------+---------+
+                           |          |
+              +------------+          +-------------+
+              |                                     |
+   +----------+----------+              +-----------+-----------+
+   |   AI Chat Widget    |              |   DeFi Pages          |
+   |   (DeepSeek API)    |              |   Stake/CDP/Withdraw  |
+   +----------+----------+              +-----------+-----------+
+              |                                     |
+              v                                     v
+   +----------+----------+         +----------------+------------------+
+   |  AI Action Executor |         |                |                   |
+   |  (13 action types)  | ------> |                |                   |
+   +---------------------+  +------+------+  +-----+-------+  +-------+--------+
+                             | Privacy      |  | Proof        |  | Contract       |
+                             | Engine       |  | Pipeline     |  | Interaction    |
+                             | (ElGamal)    |  | (Noir + BB)  |  | (starknet.js)  |
+                             +------+------+  +-----+-------+  +-------+--------+
+                                    |                |                   |
+                                    v                v                   v
+                              +-----------+  +-----------+        +----------+
+                              | Key Mgmt  |  | Garaga    |        | Starknet |
+                              | (Browser  |  | Calldata  |        | Sepolia  |
+                              |  Storage) |  | Encoding  |        |          |
+                              +-----------+  +-----------+        +-----+----+
+                                                                        |
+                                         +------------------------------+
+                                         |              |               |
+                                  +------+-----+ +-----+------+ +------+-------+
+                                  | Shielded   | | Shielded   | | Solvency     |
+                                  | Vault      | | CDP        | | Prover       |
+                                  | (Cairo)    | | (Cairo)    | | (Cairo)      |
+                                  +------+-----+ +-----+------+ +------+-------+
+                                         |              |               |
+                                         +--------------+---------------+
                                                         |
-                         +------------------------------+
-                         |              |               |
-                  +------+-----+ +-----+------+ +------+-------+
-                  | Shielded   | | Shielded   | | Solvency     |
-                  | Vault      | | CDP        | | Prover       |
-                  | (Cairo)    | | (Cairo)    | | (Cairo)      |
-                  +------+-----+ +-----+------+ +------+-------+
-                         |              |               |
-                         +--------------+---------------+
-                                        |
-                                +-------+-------+
-                                | ProofVerifier |
-                                | (Garaga       |
-                                |  On-chain VK) |
-                                +---------------+
+                                                +-------+-------+
+                                                | ProofVerifier |
+                                                | (Garaga       |
+                                                |  On-chain VK) |
+                                                +---------------+
 ```
 
 ### Component Breakdown
@@ -130,6 +140,7 @@ Obscura solves this by making balances encrypted and operations provable without
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | **Frontend** | React 18, TypeScript, Vite, TailwindCSS | User interface for all DeFi operations |
+| **AI Assistant** | DeepSeek API + Vercel Serverless | Conversational DeFi — chat-driven deposits, shields, CDPs with ZK proofs |
 | **Privacy Engine** | ElGamal on Baby JubJub curve | Key generation, encryption, decryption of balances |
 | **Proof Pipeline** | Noir (noir_js) + Barretenberg (bb.js) | In-browser ZK proof generation (UltraKeccakZKHonk) |
 | **Calldata Encoder** | Garaga npm package | Converts proofs into Starknet-compatible calldata |
@@ -297,11 +308,14 @@ The React frontend provides five pages:
 
 | Route | Page | Description |
 |-------|------|-------------|
+| `/` | Landing Page | Protocol overview, feature highlights, call-to-action |
+| `/docs` | Documentation | Architecture docs and protocol explanation |
 | `/stake` | Stake Page | Deposit xyBTC, shield to sxyBTC, faucet (testnet) |
 | `/cdp` | CDP Page | Open CDP, lock collateral, mint/repay sUSD, close |
 | `/withdraw` | Withdraw Page | Unshield sxyBTC back to public xyBTC, withdraw |
 | `/proofs` | Proofs Dashboard | View proof history, solvency status, submit solvency proofs |
 | `/settings` | Settings | Privacy key management, backup/restore |
+| — | AI Chat (widget) | Floating bottom-right assistant — explains protocol and executes operations |
 
 ### Client-Side Privacy Engine
 
@@ -333,6 +347,95 @@ When you shield, borrow, repay, or perform any private operation:
 6. **On-chain Verification** — The Garaga verifier contract validates the proof, then the contract updates state
 
 All of this happens in your browser in ~5-15 seconds.
+
+---
+
+## AI Assistant
+
+Obscura includes an AI-powered chat assistant that can **explain the protocol and execute real DeFi operations** through natural language.
+
+### What It Does
+
+The AI chat widget (bottom-right corner) connects to DeepSeek's API and has full context about your wallet state — balances, CDP positions, privacy score, and on-chain data. It can:
+
+- **Explain** — How ZK proofs work, what each circuit does, privacy vs public data
+- **Analyze** — Your current positions, CDP health, collateral ratio scenarios
+- **Execute** — Real on-chain operations with ZK proof generation, directly from chat
+
+### Executable Actions
+
+When you ask the AI to do something ("shield 5 xyBTC for me"), it returns a structured action block. The frontend parses it, shows a **confirmation dialog** (Execute / Cancel), then runs the full pipeline — witness generation, ZK proof, Garaga calldata encoding, and contract transaction — with live status updates in the chat.
+
+| Action | What Happens |
+|--------|-------------|
+| `faucet` | Mint 100 test xyBTC |
+| `deposit` | Deposit xyBTC into vault |
+| `shield` | Convert to encrypted sxyBTC (ZK range proof) |
+| `unshield` | Convert back to public (ZK balance sufficiency proof) |
+| `withdraw` | Withdraw public xyBTC |
+| `open_cdp` | Create a CDP position |
+| `lock_collateral` | Lock xyBTC as collateral (ZK range proof) |
+| `mint_susd` | Borrow sUSD (ZK collateral ratio proof) |
+| `repay` | Repay sUSD debt (ZK debt update proof) |
+| `close_cdp` | Close CDP (ZK zero debt proof) |
+| `check_balances` | Fetch and display on-chain + local balances |
+| `check_solvency` | Query protocol solvency status |
+| `submit_solvency` | Submit vault + CDP solvency proofs |
+
+### Architecture
+
+```
+User Chat Input
+      |
+      v
++------------------+     +---------------------+
+| DeepSeek API     | --> | AI Response + Action |
+| (via Vercel      |     | Block Parsing        |
+|  serverless fn)  |     +----------+----------+
++------------------+                |
+                                    v
+                         +----------+----------+
+                         | Confirmation Dialog  |
+                         | [Execute] [Cancel]   |
+                         +----------+----------+
+                                    |
+                                    v
+                         +----------+----------+
+                         | Action Executor      |
+                         | - Witness generation |
+                         | - ZK proof (noir_js) |
+                         | - Garaga calldata    |
+                         | - Contract tx        |
+                         +----------+----------+
+                                    |
+                                    v
+                         +----------+----------+
+                         | Live Status Updates  |
+                         | Success/Fail Result  |
+                         | Starkscan TX Link    |
+                         +---------------------+
+```
+
+### Security
+
+- **API key protection** — DeepSeek API key is server-side only (Vercel env var `DEEPSEEK_API_KEY`). The `VITE_DEEPSEEK_API_KEY` fallback is for local dev only.
+- **XSS protection** — All AI-generated content is HTML-escaped before rendering. Only safe tags (`<strong>`, `<code>`, `<span>`, `<a>`) are allowed.
+- **User confirmation** — Every executable action requires explicit user approval before any transaction is submitted.
+- **Same proof pipeline** — The AI executor uses the exact same contract functions and ZK proof generation as the UI pages. No shortcuts.
+
+### Files
+
+```
+frontend/
+  api/
+    chat.ts                    # Vercel serverless proxy for DeepSeek API
+  src/
+    components/
+      AIChat.tsx               # Floating chat widget with action execution UI
+    lib/ai/
+      client.ts                # DeepSeek API client + system prompt
+      executor.ts              # 13-action executor with ZK proof pipeline
+```
 
 ---
 
@@ -459,7 +562,12 @@ VITE_VERIFIER_ADDRESS=<from deployment>
 VITE_SOLVENCY_ADDRESS=<from deployment>
 VITE_PRICE_FEED_ADDRESS=<from deployment>
 VITE_XYBTC_ADDRESS=<from deployment>
+
+# AI Assistant (server-side only — NOT prefixed with VITE_)
+DEEPSEEK_API_KEY=<your DeepSeek API key>
 ```
+
+The `DEEPSEEK_API_KEY` is used by the Vercel serverless function (`/api/chat`) and never exposed to the browser. For local development, set `VITE_DEEPSEEK_API_KEY` in `frontend/.env` instead.
 
 ---
 
@@ -591,6 +699,8 @@ What is **hidden**:
 | Vite | 5.4 | Frontend bundler |
 | starknet.js | 6.x | Starknet wallet and contract interaction |
 | OpenZeppelin Cairo | v0.20.0 | Standard contract patterns (ERC20, access control) |
+| DeepSeek API | v1 | AI assistant (chat + executable DeFi actions) |
+| Vercel Serverless | Node.js | API proxy for DeepSeek (keeps API key server-side) |
 
 ---
 
@@ -616,14 +726,22 @@ obscura/
 │   ├── vault_solvency/
 │   └── cdp_safety_bound/
 ├── frontend/                # React + TypeScript dApp
+│   ├── api/
+│   │   └── chat.ts          # Vercel serverless: DeepSeek API proxy
 │   ├── src/
 │   │   ├── pages/           # Stake, CDP, Withdraw, Proofs, Settings
+│   │   ├── components/
+│   │   │   └── AIChat.tsx   # Floating AI chat widget with action execution
+│   │   ├── lib/ai/
+│   │   │   ├── client.ts    # DeepSeek API client + system prompt
+│   │   │   └── executor.ts  # 13-action executor (ZK proofs + contract txs)
 │   │   ├── lib/privacy/     # ElGamal keygen, encrypt, decrypt
 │   │   ├── lib/proofs/      # Noir witness, prover, Garaga calldata
 │   │   └── lib/contracts/   # Contract interaction layer
-│   └── public/circuits/     # Compiled circuit artifacts + VKs
-├── verifier-contracts/      # Garaga-generated Cairo verifiers
-├── scripts/                 # Deploy, E2E tests, oracle refresh
+│   ├── public/circuits/     # Compiled circuit artifacts + VKs
+│   └── vercel.json          # API route + SPA rewrite config
+├── verifier-contracts/      # Garaga-generated Cairo verifiers (7)
+├── scripts/                 # Deploy, E2E tests, oracle refresh, solvency
 └── docs/                    # Architecture, threat model
 ```
 

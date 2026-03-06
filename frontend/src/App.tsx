@@ -3,6 +3,7 @@ import { WalletProvider } from './hooks/useWallet';
 import { ToastProvider } from './components/Toast';
 import WalletConnect from './components/WalletConnect';
 import ObscuraLogo, { logoStyles } from './components/ObscuraLogo';
+import AIChat from './components/AIChat';
 import LandingPage from './pages/LandingPage';
 import DocsPage from './pages/DocsPage';
 import StakePage from './pages/StakePage';
@@ -164,6 +165,7 @@ export default function App() {
     <WalletProvider>
       <ToastProvider>
         <AppLayout />
+        <AIChat />
       </ToastProvider>
     </WalletProvider>
   );

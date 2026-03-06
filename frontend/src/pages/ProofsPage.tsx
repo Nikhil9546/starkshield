@@ -423,14 +423,19 @@ export default function ProofsPage() {
                         {new Date(record.timestamp).toLocaleString()}
                       </span>
                       {record.txHash && (
-                        <a
-                          href={`https://sepolia.starkscan.co/tx/${record.txHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-shield-400 hover:text-shield-300 font-mono transition-colors"
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(record.txHash!);
+                          }}
+                          className="text-[11px] text-shield-400 hover:text-shield-300 font-mono transition-colors cursor-pointer flex items-center gap-1 bg-transparent border-none p-0"
+                          title="Click to copy full tx hash"
                         >
-                          tx: {record.txHash.slice(0, 10)}...
-                        </a>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                          tx: {record.txHash.slice(0, 8)}...{record.txHash.slice(-4)}
+                        </button>
                       )}
                       {record.provingTimeMs && (
                         <span className="text-[11px] text-gray-600">

@@ -1,0 +1,6 @@
+total_assets = "100000"
+total_liabilities = "80000"
+assets_blinding = "10"
+liabilities_blinding = "67"
+assets_commitment = "0x013b5ef168d348ffc3abd52bd681f53e22b77b33d13d94571fa0f096f03f8a68"
+liabilities_commitment = "0x05b3f61310e5ef1807ba1bb79f4a3339bb51df414055b1286ca0e460f295ecb3"
