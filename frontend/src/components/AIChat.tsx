@@ -103,9 +103,14 @@ export default function AIChat() {
     ].filter(Boolean).join('\n');
   }, [address, balances]);
 
-  // Strip action blocks from AI text for display
+  // Strip action blocks and fake TX hashes from AI text for display
   const stripActionBlocks = (text: string): string => {
-    return text.replace(/```action\s*\n[\s\S]*?\n```/g, '').trim();
+    return text
+      .replace(/```action\s*\n[\s\S]*?\n```/g, '')
+      .replace(/\{"action"\s*:\s*"\w+"(?:\s*,\s*"amount"\s*:\s*\d+(?:\.\d+)?)?\s*\}/g, '')
+      .replace(/TX_HASH:\s*0x[a-fA-F0-9]+/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   };
 
   // Format action for display

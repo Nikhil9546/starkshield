@@ -60,12 +60,15 @@ export type StatusCallback = (status: string) => void;
 /**
  * Parse AI response for action blocks.
  * AI returns actions in format: ```action\n{"action":"deposit","amount":50}\n```
+ * Falls back to detecting inline JSON or intent patterns if formal block is missing.
  */
 export function parseActions(aiResponse: string): AIAction[] {
   const actions: AIAction[] = [];
-  const regex = /```action\s*\n([\s\S]*?)\n```/g;
+
+  // 1. Try formal ```action blocks first
+  const formalRegex = /```action\s*\n([\s\S]*?)\n```/g;
   let match;
-  while ((match = regex.exec(aiResponse)) !== null) {
+  while ((match = formalRegex.exec(aiResponse)) !== null) {
     try {
       const parsed = JSON.parse(match[1].trim());
       if (parsed.action) actions.push(parsed);
@@ -73,6 +76,50 @@ export function parseActions(aiResponse: string): AIAction[] {
       // skip invalid JSON
     }
   }
+  if (actions.length > 0) return actions;
+
+  // 2. Try inline JSON like {"action":"deposit","amount":10} anywhere in text
+  const inlineRegex = /\{"action"\s*:\s*"(\w+)"(?:\s*,\s*"amount"\s*:\s*(\d+(?:\.\d+)?))?\s*\}/g;
+  while ((match = inlineRegex.exec(aiResponse)) !== null) {
+    const action: AIAction = { action: match[1] as ActionType };
+    if (match[2]) action.amount = parseFloat(match[2]);
+    actions.push(action);
+  }
+  if (actions.length > 0) return actions;
+
+  // 3. Fallback: detect action intent from natural language patterns
+  const lower = aiResponse.toLowerCase();
+  const amountMatch = lower.match(/(\d+(?:\.\d+)?)\s*(?:sxybtc|xybtc|susd)/);
+  const amount = amountMatch ? parseFloat(amountMatch[1]) : undefined;
+
+  const patterns: [RegExp, ActionType][] = [
+    [/i'll\s+(?:mint|get)\s+(?:\d+\s+)?test\s+(?:xybtc|tokens?).*faucet|i'll\s+(?:use\s+)?(?:the\s+)?faucet/i, 'faucet'],
+    [/i'll\s+deposit\s+(\d+(?:\.\d+)?)\s*xybtc/i, 'deposit'],
+    [/i'll\s+shield\s+(\d+(?:\.\d+)?)/i, 'shield'],
+    [/i'll\s+unshield\s+(\d+(?:\.\d+)?)/i, 'unshield'],
+    [/i'll\s+withdraw\s+(\d+(?:\.\d+)?)/i, 'withdraw'],
+    [/i'll\s+open\s+(?:a\s+)?(?:new\s+)?cdp/i, 'open_cdp'],
+    [/i'll\s+lock\s+(\d+(?:\.\d+)?)\s*(?:sxybtc|xybtc).*collateral/i, 'lock_collateral'],
+    [/i'll\s+mint\s+(\d+(?:\.\d+)?)\s*susd/i, 'mint_susd'],
+    [/i'll\s+repay\s+(\d+(?:\.\d+)?)\s*susd/i, 'repay'],
+    [/i'll\s+close\s+(?:your\s+|the\s+)?cdp/i, 'close_cdp'],
+    [/check.*(?:balance|position)/i, 'check_balances'],
+    [/check.*solvenc/i, 'check_solvency'],
+  ];
+
+  for (const [pattern, actionType] of patterns) {
+    const m = lower.match(pattern);
+    if (m) {
+      const parsedAmt = m[1] ? parseFloat(m[1]) : amount;
+      const action: AIAction = { action: actionType };
+      if (parsedAmt && !['faucet', 'open_cdp', 'close_cdp', 'check_balances', 'check_solvency'].includes(actionType)) {
+        action.amount = parsedAmt;
+      }
+      actions.push(action);
+      break;
+    }
+  }
+
   return actions;
 }
 
