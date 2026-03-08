@@ -81,7 +81,7 @@ The contract stores commitments (not amounts). ZK proofs prove properties about 
 
 Seven specialized circuits prove different properties about encrypted state:
 
-<img width="1086" height="370" alt="image" src="https://github.com/user-attachments/assets/d2664d95-c79e-486e-b623-56a0f0fb98af" />
+<img width="589" height="316" alt="image" src="https://github.com/user-attachments/assets/ba93237e-99c7-433e-a2b5-6086305c7e9e" />
 
 
 The contract never sees your amounts — it only sees the proof (which reveals nothing) and the commitment (which is hiding the value).
@@ -284,34 +284,8 @@ An authorized prover submits proofs periodically. Anyone can query verification 
 
 Obscura includes an AI-powered chat assistant (bottom-right widget) that can explain the protocol AND execute real DeFi operations through natural language.
 
-```
-"Shield 5 xyBTC for me"
-        │
-        ▼
-┌──────────────────┐     ┌─────────────────────┐
-│ DeepSeek API     │────▶│ Structured Action    │
-│ (Vercel          │     │ Block Returned       │
-│  serverless)     │     └──────────┬──────────┘
-└──────────────────┘                │
-                                    ▼
-                         ┌──────────────────────┐
-                         │ Confirmation Dialog   │
-                         │ [Execute]  [Cancel]   │
-                         └──────────┬──────────┘
-                                    │ Execute
-                                    ▼
-                         ┌──────────────────────┐
-                         │ Full ZK Pipeline      │
-                         │ Witness → Proof →     │
-                         │ Calldata → TX         │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │ Live Status + Result  │
-                         │ Starkscan TX Link     │
-                         └──────────────────────┘
-```
+<img width="385" height="720" alt="image" src="https://github.com/user-attachments/assets/b769a7f5-d43c-4f94-af6c-4e441b8d1bd8" />
+
 
 **Capabilities:** Explain ZK proofs and circuits, analyze positions and CDP health, execute all 13 actions with full proof pipeline, provide privacy score assessment.
 
