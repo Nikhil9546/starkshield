@@ -745,5 +745,5 @@ obscura/
 └── docs/                    # Architecture, threat model
 ```
 
-
+---
 
