@@ -19,7 +19,17 @@ const cdpAddr = () => CONTRACT_ADDRESSES.shieldedCDP;
 const tokenAddr = () => CONTRACT_ADDRESSES.xyBTC;
 const priceFeedAddr = () => CONTRACT_ADDRESSES.priceFeed;
 
-const execOpts = () => IS_DEVNET ? DEVNET_RESOURCE_BOUNDS : {};
+/** Get execute options — generous bounds to handle Sepolia gas spikes */
+const execOpts = () => {
+  if (IS_DEVNET) return DEVNET_RESOURCE_BOUNDS;
+  return {
+    resourceBounds: {
+      l1_gas: { max_amount: '0x2710', max_price_per_unit: '0x174876e800' },
+      l2_gas: { max_amount: '0x600400', max_price_per_unit: '0x3b9aca000' },
+      l1_data_gas: { max_amount: '0x800', max_price_per_unit: '0x3000000000' },
+    },
+  };
+};
 
 /** MockProofVerifier always returns true — send minimal proof data on devnet only */
 const mockProofData = () => IS_DEVNET ? ['0xdeadbeef'] : null;

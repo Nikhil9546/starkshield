@@ -7,6 +7,8 @@ import { CircuitType, preloadCircuits } from '../lib/proofs/circuits';
 import { isVaultSolvent, getVaultLastVerified, isCdpSafe, getCdpLastVerified, getVaultNumAccounts, getVaultAssetsCommitment, getCdpNumCdps, getCdpCollateralCommitment, getProver, submitVaultSolvencyProof, submitCdpSafetyProof } from '../lib/contracts/solvency';
 import { getTotalDeposited } from '../lib/contracts/vault';
 import { loadProofHistory, type ProofRecord } from '../lib/proofHistory';
+import { isIPFSConfigured, getIPFSUrl } from '../lib/ipfs/client';
+import { getStoredIndexCID, fetchProofIndex, type ProofIndex } from '../lib/ipfs/proofStore';
 
 // Page-specific styles
 const pageStyles = `
@@ -107,6 +109,11 @@ export default function ProofsPage() {
   const [solvencyLoading, setSolvencyLoading] = useState(false);
   const [submittingSolvency, setSubmittingSolvency] = useState(false);
 
+  // IPFS state
+  const [ipfsIndex, setIpfsIndex] = useState<ProofIndex | null>(null);
+  const [ipfsLoading, setIpfsLoading] = useState(false);
+  const ipfsConfigured = isIPFSConfigured();
+
   const fetchSolvencyData = useCallback(async () => {
     if (!account) return;
     setSolvencyLoading(true);
@@ -175,6 +182,24 @@ export default function ProofsPage() {
       setProofHistory(loadProofHistory(address));
     }
   }, [address]);
+
+  // Load IPFS index
+  const fetchIPFSIndex = useCallback(async () => {
+    if (!address || !ipfsConfigured) return;
+    setIpfsLoading(true);
+    try {
+      const index = await fetchProofIndex(address);
+      setIpfsIndex(index);
+    } catch {
+      // IPFS not available
+    } finally {
+      setIpfsLoading(false);
+    }
+  }, [address, ipfsConfigured]);
+
+  useEffect(() => {
+    fetchIPFSIndex();
+  }, [fetchIPFSIndex]);
 
   const handlePreload = async () => {
     setPreloading(true);
@@ -447,6 +472,18 @@ export default function ProofsPage() {
                           {(record.proofSizeBytes / 1024).toFixed(1)}KB
                         </span>
                       )}
+                      {record.ipfsCid && (
+                        <button
+                          onClick={() => navigator.clipboard.writeText(record.ipfsCid!)}
+                          className="text-[11px] text-cyan-400 hover:text-cyan-300 font-mono transition-colors cursor-pointer flex items-center gap-1 bg-transparent border-none p-0"
+                          title={`IPFS: ${record.ipfsCid}`}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                          </svg>
+                          ipfs
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -455,6 +492,119 @@ export default function ProofsPage() {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* IPFS Proof Archive */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="section-title flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-400">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+              IPFS Proof Archive
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {ipfsConfigured
+                ? 'Proofs are pinned to IPFS for permanent, decentralized storage.'
+                : 'Set VITE_PINATA_JWT in .env to enable IPFS proof storage.'}
+            </p>
+          </div>
+          {ipfsConfigured && (
+            <button
+              onClick={fetchIPFSIndex}
+              disabled={ipfsLoading}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-2"
+            >
+              {ipfsLoading && <span className="w-3 h-3 border border-gray-500/30 border-t-gray-500 rounded-full animate-spin" />}
+              {ipfsLoading ? 'Loading...' : 'Refresh'}
+            </button>
+          )}
+        </div>
+
+        {!ipfsConfigured ? (
+          <div className="text-center py-6">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/[0.05] border border-cyan-500/[0.1] flex items-center justify-center mx-auto mb-3">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-500/50">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+            </div>
+            <p className="text-gray-500 text-sm">IPFS not configured</p>
+            <p className="text-gray-600 text-[11px] mt-1">Add VITE_PINATA_JWT to your .env file to enable proof pinning</p>
+          </div>
+        ) : ipfsIndex && ipfsIndex.proofs.length > 0 ? (
+          <div>
+            <div className="flex items-center gap-2 mb-3 px-2">
+              <span className="badge bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px]">
+                {ipfsIndex.proofs.length} proofs on IPFS
+              </span>
+              {getStoredIndexCID(address) && (
+                <button
+                  onClick={() => navigator.clipboard.writeText(getStoredIndexCID(address)!)}
+                  className="text-[10px] text-gray-500 hover:text-cyan-400 font-mono transition-colors cursor-pointer flex items-center gap-1 bg-transparent border-none p-0"
+                  title="Copy index CID"
+                >
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  index: {getStoredIndexCID(address)!.slice(0, 12)}...
+                </button>
+              )}
+            </div>
+            <div className="space-y-1">
+              {ipfsIndex.proofs.map((entry) => (
+                <div
+                  key={entry.cid}
+                  className="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-white/[0.02] border-b border-white/[0.04] last:border-0 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] bg-cyan-500/10 text-cyan-400">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-200 font-medium">{circuitLabel(entry.circuit)}</span>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-[11px] text-gray-600">
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(entry.cid)}
+                          className="text-[11px] text-cyan-400 hover:text-cyan-300 font-mono transition-colors cursor-pointer flex items-center gap-1 bg-transparent border-none p-0"
+                          title={`CID: ${entry.cid}`}
+                        >
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                          {entry.cid.slice(0, 12)}...
+                        </button>
+                        <a
+                          href={getIPFSUrl(entry.cid)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-cyan-500/60 hover:text-cyan-400 transition-colors"
+                        >
+                          view
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                  <span className={entry.verified ? 'badge-green' : 'badge bg-white/5 text-gray-500 border border-white/10'}>
+                    {entry.verified ? 'verified' : 'pending'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <p className="text-gray-500 text-sm">No proofs on IPFS yet</p>
+            <p className="text-gray-600 text-[11px] mt-1">Proofs are automatically pinned after successful verification</p>
           </div>
         )}
       </div>

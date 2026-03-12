@@ -4,7 +4,7 @@
  */
 
 import { type AccountInterface, RpcProvider } from 'starknet';
-import { CONTRACT_ADDRESSES, IS_DEVNET, getRpcUrl } from './config';
+import { CONTRACT_ADDRESSES, IS_DEVNET, DEVNET_RESOURCE_BOUNDS, getRpcUrl } from './config';
 import { CircuitType, loadVK } from '../proofs/circuits';
 import { generateProof, type ProgressCallback } from '../proofs/prover';
 import { encodeGaragaCalldata, bytesToFelts } from '../proofs/calldata';
@@ -12,6 +12,18 @@ import { findValidBlinding } from '../privacy/encrypt';
 import type { VaultSolvencyWitness, CDPSafetyWitness } from '../proofs/witness';
 
 const solvencyAddr = () => CONTRACT_ADDRESSES.solvencyProver;
+
+/** Get execute options — generous bounds to handle Sepolia gas spikes */
+const execOpts = () => {
+  if (IS_DEVNET) return DEVNET_RESOURCE_BOUNDS;
+  return {
+    resourceBounds: {
+      l1_gas: { max_amount: '0x2710', max_price_per_unit: '0x174876e800' },
+      l2_gas: { max_amount: '0x600400', max_price_per_unit: '0x3b9aca000' },
+      l1_data_gas: { max_amount: '0x800', max_price_per_unit: '0x3000000000' },
+    },
+  };
+};
 
 /** Get a direct RPC provider for read calls (matches vault.ts / cdp.ts pattern) */
 function getProvider(): RpcProvider {
@@ -215,11 +227,15 @@ export async function submitVaultSolvencyProof(
     ...proofData,                         // proof_data elements
   ];
 
-  const result = await account.execute({
-    contractAddress: solvencyAddr(),
-    entrypoint: 'submit_vault_solvency_proof',
-    calldata,
-  });
+  const result = await account.execute(
+    {
+      contractAddress: solvencyAddr(),
+      entrypoint: 'submit_vault_solvency_proof',
+      calldata,
+    },
+    undefined,
+    execOpts(),
+  );
 
   onProgress?.({ stage: 'confirming', percent: 96, message: 'Waiting for confirmation...' });
   return result.transaction_hash;
@@ -283,11 +299,15 @@ export async function submitCdpSafetyProof(
     ...proofData,                          // proof_data elements
   ];
 
-  const result = await account.execute({
-    contractAddress: solvencyAddr(),
-    entrypoint: 'submit_cdp_safety_proof',
-    calldata,
-  });
+  const result = await account.execute(
+    {
+      contractAddress: solvencyAddr(),
+      entrypoint: 'submit_cdp_safety_proof',
+      calldata,
+    },
+    undefined,
+    execOpts(),
+  );
 
   onProgress?.({ stage: 'confirming', percent: 96, message: 'Waiting for confirmation...' });
   return result.transaction_hash;

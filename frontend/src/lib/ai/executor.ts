@@ -21,11 +21,35 @@ import {
   getLocalCDPCollateral, setLocalCDPCollateral, getLocalCDPDebt, setLocalCDPDebt,
   getCDPColWitness, setCDPColWitness, clearCDPState,
 } from '../shieldedBalance';
-import { addProofRecord } from '../proofHistory';
+import { addProofRecord, pinProofToIPFS } from '../proofHistory';
 import type { RangeProofWitness, BalanceSufficiencyWitness, DebtUpdateWitness, CollateralRatioWitness, ZeroDebtWitness } from '../proofs/witness';
 
 const SKIP_PROOFS = IS_DEVNET;
 const MOCK_PROOF = { proof: new Uint8Array([0xde, 0xad]), publicInputs: ['0x0'] };
+
+/** Helper: convert Uint8Array to hex string */
+function toHexString(bytes: Uint8Array): string {
+  return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Record proof in localStorage and pin to IPFS (non-blocking). */
+function recordAndPinProof(
+  address: string,
+  circuit: CircuitType,
+  txHash: string,
+  proof: { proof: Uint8Array; publicInputs: string[] },
+): void {
+  const record = {
+    id: crypto.randomUUID(),
+    circuit,
+    status: 'verified' as const,
+    timestamp: Date.now(),
+    txHash,
+    proofSizeBytes: proof.proof.length,
+  };
+  addProofRecord(address, record);
+  pinProofToIPFS(address, record, toHexString(proof.proof), proof.publicInputs);
+}
 
 export type ActionType =
   | 'faucet'
@@ -236,7 +260,7 @@ export async function executeAction(
         const oldS = getShieldedWitnessState(address);
         const oldU = oldS?.balanceU64 ?? BigInt(0);
         setShieldedWitnessState(address, { balanceU64: oldU + amountWitness, blinding: newBlinding, commitment: newCommitment });
-        addProofRecord(address, { id: crypto.randomUUID(), circuit: circuitType, status: 'verified', timestamp: Date.now(), txHash: hash });
+        recordAndPinProof(address, circuitType, hash, proof);
 
         return { success: true, message: `Shielded ${amt} xyBTC with ZK proof. Balance is now encrypted on-chain.`, txHash: hash };
       }
@@ -290,7 +314,7 @@ export async function executeAction(
 
         subtractShieldedBalance(address, amountBig);
         setShieldedWitnessState(address, { balanceU64: newBalance, blinding: newR.blinding, commitment: newR.commitment });
-        addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.BALANCE_SUFFICIENCY, status: 'verified', timestamp: Date.now(), txHash: hash });
+        recordAndPinProof(address, CircuitType.BALANCE_SUFFICIENCY, hash, proof);
 
         return { success: true, message: `Unshielded ${amt} xyBTC. Balance converted back to public.`, txHash: hash };
       }
@@ -361,7 +385,7 @@ export async function executeAction(
 
         setLocalCDPCollateral(address, getLocalCDPCollateral(address) + amountWitness);
         setCDPColWitness(address, { balanceU64: (getCDPColWitness(address)?.balanceU64 ?? BigInt(0)) + amountWitness, blinding: newBlinding, commitment: newCommitment });
-        addProofRecord(address, { id: crypto.randomUUID(), circuit: circuitType, status: 'verified', timestamp: Date.now(), txHash: hash });
+        recordAndPinProof(address, circuitType, hash, proof);
 
         return { success: true, message: `Locked ${amt} xyBTC as collateral with ZK proof.`, txHash: hash };
       }
@@ -399,7 +423,7 @@ export async function executeAction(
 
         const hash = await mintSUSD(account, { newCollateralCommitment: colWitness.commitment, newDebtCommitment: dCommitment, proofData, publicInputs: proof.publicInputs, nullifier });
         setLocalCDPDebt(address, getLocalCDPDebt(address) + amountWitness);
-        addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.COLLATERAL_RATIO, status: 'verified', timestamp: Date.now(), txHash: hash });
+        recordAndPinProof(address, CircuitType.COLLATERAL_RATIO, hash, proof);
 
         return { success: true, message: `Minted ${amt} sUSD against your collateral. CR proof verified on-chain.`, txHash: hash };
       }
@@ -434,7 +458,7 @@ export async function executeAction(
 
         const hash = await repay(account, { newDebtCommitment: newR.commitment, proofData, publicInputs: proof.publicInputs, nullifier });
         setLocalCDPDebt(address, newDebt);
-        addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.DEBT_UPDATE_VALIDITY, status: 'verified', timestamp: Date.now(), txHash: hash });
+        recordAndPinProof(address, CircuitType.DEBT_UPDATE_VALIDITY, hash, proof);
 
         return { success: true, message: `Repaid ${amt} sUSD. Remaining debt: ${Number(newDebt) / 1e8} sUSD.`, txHash: hash };
       }
@@ -456,7 +480,7 @@ export async function executeAction(
 
         const hash = await closeCDP(account, { proofData, publicInputs: proof.publicInputs, nullifier });
         clearCDPState(address);
-        addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.ZERO_DEBT, status: 'verified', timestamp: Date.now(), txHash: hash });
+        recordAndPinProof(address, CircuitType.ZERO_DEBT, hash, proof);
 
         return { success: true, message: 'CDP closed. All collateral returned to your wallet.', txHash: hash };
       }

@@ -13,7 +13,7 @@ import { loadVK } from '../lib/proofs/circuits';
 import { openCDP, lockCollateral, mintSUSD, repay, closeCDP, hasCDP as checkHasCDP, checkOracleFreshness, refreshOracle, getCollateralCommitment } from '../lib/contracts/cdp';
 import { faucetMint } from '../lib/contracts/vault';
 import { IS_DEVNET, NETWORK } from '../lib/contracts/config';
-import { addProofRecord } from '../lib/proofHistory';
+import { addProofRecord, pinProofToIPFS } from '../lib/proofHistory';
 import { getLocalCDPCollateral, setLocalCDPCollateral, getLocalCDPDebt, setLocalCDPDebt, getCDPColWitness, setCDPColWitness, clearCDPState } from '../lib/shieldedBalance';
 import type { CollateralRatioWitness, ZeroDebtWitness, RangeProofWitness, DebtUpdateWitness } from '../lib/proofs/witness';
 
@@ -391,7 +391,9 @@ export default function CDPPage() {
           const prevU64 = colWitness?.balanceU64 ?? BigInt(0);
           setLocalCollateral(prev => prev + amountU64);
           setColWitness({ balanceU64: prevU64 + amountU64, blinding: lockBlinding, commitment: lockCommitment });
-          addProofRecord(address, { id: crypto.randomUUID(), circuit: lockCircuit, status: 'verified', timestamp: Date.now(), txHash: hash });
+          const lockRecord = { id: crypto.randomUUID(), circuit: lockCircuit, status: 'verified' as const, timestamp: Date.now(), txHash: hash, proofSizeBytes: lockProof.proof.length };
+          addProofRecord(address, lockRecord);
+          pinProofToIPFS(address, lockRecord, '0x' + Array.from(lockProof.proof).map(b => b.toString(16).padStart(2, '0')).join(''), lockProof.publicInputs);
           break;
         }
         case 'mint': {
@@ -448,7 +450,9 @@ export default function CDPPage() {
           });
           toast.success('sUSD minted', `tx: ${hash.slice(0, 20)}...`);
           setLocalDebt(prev => prev + debtU64);
-          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.COLLATERAL_RATIO, status: 'verified', timestamp: Date.now(), txHash: hash });
+          const mintRecord = { id: crypto.randomUUID(), circuit: CircuitType.COLLATERAL_RATIO, status: 'verified' as const, timestamp: Date.now(), txHash: hash, proofSizeBytes: proof.proof.length };
+          addProofRecord(address, mintRecord);
+          pinProofToIPFS(address, mintRecord, '0x' + Array.from(proof.proof).map(b => b.toString(16).padStart(2, '0')).join(''), proof.publicInputs);
           break;
         }
         case 'repay': {
@@ -491,7 +495,9 @@ export default function CDPPage() {
           });
           toast.success('Debt repaid', `tx: ${hash.slice(0, 20)}...`);
           setLocalDebt(newDebtU64);
-          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.DEBT_UPDATE_VALIDITY, status: 'verified', timestamp: Date.now(), txHash: hash });
+          const repayRecord = { id: crypto.randomUUID(), circuit: CircuitType.DEBT_UPDATE_VALIDITY, status: 'verified' as const, timestamp: Date.now(), txHash: hash, proofSizeBytes: proof.proof.length };
+          addProofRecord(address, repayRecord);
+          pinProofToIPFS(address, repayRecord, '0x' + Array.from(proof.proof).map(b => b.toString(16).padStart(2, '0')).join(''), proof.publicInputs);
           break;
         }
         case 'close': {
@@ -509,7 +515,9 @@ export default function CDPPage() {
             nullifier,
           });
           toast.success('CDP closed', `tx: ${hash.slice(0, 20)}...`);
-          addProofRecord(address, { id: crypto.randomUUID(), circuit: CircuitType.ZERO_DEBT, status: 'verified', timestamp: Date.now(), txHash: hash });
+          const closeRecord = { id: crypto.randomUUID(), circuit: CircuitType.ZERO_DEBT, status: 'verified' as const, timestamp: Date.now(), txHash: hash, proofSizeBytes: proof.proof.length };
+          addProofRecord(address, closeRecord);
+          pinProofToIPFS(address, closeRecord, '0x' + Array.from(proof.proof).map(b => b.toString(16).padStart(2, '0')).join(''), proof.publicInputs);
           setHasCDP(false);
           setLocalCollateral(BigInt(0));
           setLocalDebt(BigInt(0));

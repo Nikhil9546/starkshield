@@ -13,7 +13,7 @@ import { generateNullifier, bytesToFelts, encodeGaragaCalldata } from '../lib/pr
 import { loadVK } from '../lib/proofs/circuits';
 import { withdraw, unshield } from '../lib/contracts/vault';
 import { IS_DEVNET } from '../lib/contracts/config';
-import { addProofRecord } from '../lib/proofHistory';
+import { addProofRecord, pinProofToIPFS } from '../lib/proofHistory';
 import { getLocalShieldedBalance, subtractShieldedBalance, setShieldedWitnessState, clearShieldedWitnessState } from '../lib/shieldedBalance';
 import type { BalanceSufficiencyWitness } from '../lib/proofs/witness';
 
@@ -214,13 +214,16 @@ export default function WithdrawPage() {
         });
       }
 
-      addProofRecord(address, {
+      const proofRecord = {
         id: crypto.randomUUID(),
         circuit: CircuitType.BALANCE_SUFFICIENCY,
-        status: 'verified',
+        status: 'verified' as const,
         timestamp: Date.now(),
         txHash: hash,
-      });
+        proofSizeBytes: proof.proof.length,
+      };
+      addProofRecord(address, proofRecord);
+      pinProofToIPFS(address, proofRecord, '0x' + Array.from(proof.proof).map(b => b.toString(16).padStart(2, '0')).join(''), proof.publicInputs);
 
       setTimeout(() => refresh(), 1000);
     } catch (err) {

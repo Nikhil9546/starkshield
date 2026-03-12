@@ -141,8 +141,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (provider as any).channel.blockIdentifier = 'latest';
 
-      // Create an Account instance using the wallet as the signer
-      // The wallet handles signing via its request() method
       const walletAccount = new WalletAccount(provider, connectedWallet);
 
       setAccount(walletAccount);
